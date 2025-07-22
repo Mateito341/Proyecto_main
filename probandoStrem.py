@@ -143,6 +143,7 @@ def create_tables(conn):
             weed_placement TEXT,
             weed_type TEXT,
             weed_name TEXT,
+            weed_applied INTEGER,
             FOREIGN KEY (ensayo_id) REFERENCES ensayos(ensayo_id)
         )""")
         
@@ -163,7 +164,8 @@ tabs = st.tabs([
     "🌍 Condiciones del Lote",
     "📋 Detalles de Aplicación",
     "🛠️ Evaluación",
-    "📤 Enviar"
+    "📤 Enviar",
+    "⚙️ Desarrollo"
 ])
 
 # RECOLECTAMOS LOS DATOS FUERA DE CUALQUIER FORMULARIO
@@ -199,7 +201,7 @@ with tabs[1]:
         relative_humidity = st.number_input("Humedad relativa (%)")
         wind_direction = st.text_input("Dirección del viento")
         ambient_light_intensity = st.number_input("Intensidad de luz (lux)")
-        cloudiness = st.number_input("Nubosidad (%)", min_value=0.0, max_value=100.0, value=0)
+        cloudiness = st.number_input("Nubosidad (%)", min_value=0.0, max_value=100.0, value=0.0)
     with col3:
         st.subheader("🌱 Cultivo")
         crop_specie = st.text_input("Especie del cultivo *")
@@ -231,7 +233,7 @@ with tabs[2]:
     with col3:
         st.subheader("💧 Herbicida")
         herbicide = st.text_input("Nombre del herbicida")
-        dose = st.text_input("Dosis aplicada (l/ha)")
+        dose = st.number_input("Dosis aplicada (l/ha)")
 
 with tabs[3]:
     col1, col2 = st.columns(2)
@@ -379,7 +381,7 @@ with tabs[4]:
                             """INSERT INTO condiciones_ambientales (
                                 ensayo_id, ambient_temperature, wind_speed, 
                                 relative_humidity, wind_direction, ambient_light_intensity, cloudiness
-                            ) VALUES (?, ?, ?, ?, ?, ?)""",
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?)""",
                             (ensayo_id, ambient_temperature, wind_speed, 
                             relative_humidity, wind_direction, ambient_light_intensity, cloudiness)
                         )
@@ -411,7 +413,7 @@ with tabs[4]:
                             """INSERT INTO colorante (
                                 ensayo_id, dye_used, dye_manufacturer, dye_concentration_ll, 
                                 dye_concentration_gl
-                            ) VALUES (?, ?, ?, ?, ?, ?)""",
+                            ) VALUES (?, ?, ?, ?, ?)""",
                             (ensayo_id, dye_used, dye_manufacturer, dye_concentration_ll, 
                             dye_concentration_gl)
                         )
@@ -448,11 +450,11 @@ with tabs[4]:
                                     cursor.execute(
                                         """INSERT INTO resultados_malezas (
                                             ensayo_id, uploader, weed_diameter, size, height,
-                                            weed_placement, weed_type, weed_name
-                                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                                            weed_placement, weed_type, weed_name, weed_applied
+                                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                                         (ensayo_id, uploader, row.get('weed_diameter'), row.get('size'),
                                         row.get('height'), row.get('weed_placement'), 
-                                        row.get('weed_type'), row.get('weed_name'))
+                                        row.get('weed_type'), row.get('weed_name'), row.get('weed_applied'))
                                     )
                             except Exception as e:
                                 st.warning(f"Advertencia: No se pudo procesar el archivo CSV. Error: {str(e)}")
@@ -466,3 +468,38 @@ with tabs[4]:
                         st.error(f"Error al enviar el formulario: {str(e)}")
                 else:
                     st.error("No se pudo conectar a la base de datos. No se guardó la información.")
+
+# Esto solo lo ve el desarrollador
+with tabs[5]:
+    st.header("📂 Ver datos almacenados")
+
+    if conn:
+        if st.button("🔄 Resetear todas las tablas"):
+            try:
+                cursor = conn.cursor()
+                tablas = [
+                    "clientes", "ensayos", "ubicacion", "condiciones_ambientales",
+                    "cultivo", "pulverizadora", "colorante", "personal",
+                    "herbicida", "modelo_deteccion", "resultados_malezas"
+                ]
+                for tabla in tablas:
+                    cursor.execute(f"DELETE FROM {tabla}")
+                conn.commit()
+                st.success("✅ Todas las tablas fueron vaciadas correctamente.")
+            except Exception as e:
+                st.error(f"Error al resetear tablas: {str(e)}")
+
+        with st.expander("📋 Ver tablas de la base de datos"):
+            table_to_view = st.selectbox("Selecciona una tabla para ver los datos", [
+                "clientes", "ensayos", "ubicacion", "condiciones_ambientales",
+                "cultivo", "pulverizadora", "colorante", "personal",
+                "herbicida", "modelo_deteccion", "resultados_malezas"
+            ])
+
+            try:
+                df = pd.read_sql_query(f"SELECT * FROM {table_to_view}", conn)
+                st.dataframe(df)
+            except Exception as e:
+                st.error(f"No se pudo leer la tabla: {str(e)}")
+    else:
+        st.error("No hay conexión a la base de datos.")
