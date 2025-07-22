@@ -312,6 +312,7 @@ def archivos_estandarizados(dataframes_procesados):
         # Guardar archivo
         nombre_salida = f"[estandarizado_{fecha}_{cliente}]_{os.path.basename(archivo)}"
         ruta_salida = os.path.join('output_planillas', nombre_salida)
+        df_estandar.columns = [col.strip().lower().replace(" ", "_") for col in df_estandar.columns]
         df_estandar.to_csv(ruta_salida, index=False)
         print(f"✅ Archivo guardado: {ruta_salida}")
 
