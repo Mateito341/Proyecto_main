@@ -59,6 +59,7 @@ def create_tables(conn):
             relative_humidity REAL,
             wind_direction TEXT,
             ambient_light_intensity REAL,
+            cloudiness REAL,
             FOREIGN KEY (ensayo_id) REFERENCES ensayos(ensayo_id)
         )""")
         
@@ -97,9 +98,8 @@ def create_tables(conn):
             ensayo_id INTEGER PRIMARY KEY,
             dye_used TEXT,
             dye_manufacturer TEXT,
-            dye_concentration REAL,
-            sensitivity TEXT,
-            tile_size REAL,
+            dye_concentration_ll REAL,
+            dye_concentration_gl REAL,
             FOREIGN KEY (ensayo_id) REFERENCES ensayos(ensayo_id)
         )""")
         
@@ -198,7 +198,8 @@ with tabs[1]:
         wind_speed = st.number_input("Velocidad del viento (km/h) *")
         relative_humidity = st.number_input("Humedad relativa (%)")
         wind_direction = st.text_input("Dirección del viento")
-        ambient_light_intensity = st.number_input("Intensidad de luz")
+        ambient_light_intensity = st.number_input("Intensidad de luz (lux)")
+        cloudiness = st.number_input("Nubosidad (%)", min_value=0.0, max_value=100.0, value=0)
     with col3:
         st.subheader("🌱 Cultivo")
         crop_specie = st.text_input("Especie del cultivo *")
@@ -225,9 +226,8 @@ with tabs[2]:
         st.subheader("🧪 Colorante")
         dye_used = st.text_input("Tipo de colorante")
         dye_manufacturer = st.text_input("Fabricante", key="dye_manufacturer")
-        dye_concentration = st.number_input("Concentración (%)")
-        sensitivity = st.number_input("Sensibilidad")
-        tile_size = st.number_input("Tamaño (μm)")
+        dye_concentration_ll = st.number_input("Concentración (l/l)")
+        dye_concentration_gl = st.number_input("Concentración (g/l)")
     with col3:
         st.subheader("💧 Herbicida")
         herbicide = st.text_input("Nombre del herbicida")
@@ -273,7 +273,8 @@ with tabs[4]:
     st.write(f"- Velocidad del viento: {wind_speed} km/h")
     st.write(f"- Humedad relativa: {relative_humidity} %")
     st.write(f"- Dirección del viento: {wind_direction}")
-    st.write(f"- Intensidad de luz: {ambient_light_intensity}")
+    st.write(f"- Intensidad de luz: {ambient_light_intensity} (lux)")
+    st.write(f"- Nubosidad: {cloudiness} %")
     st.write("**🌱 Cultivo**")
     st.write(f"- Cultivo: {crop_specie}")
     st.write(f"- Suelo labrado: {tillage}")
@@ -296,12 +297,11 @@ with tabs[4]:
     st.write("**🧪 Colorante**")
     st.write(f"- Tipo: {dye_used}")
     st.write(f"- Fabricante: {dye_manufacturer}")
-    st.write(f"- Concentración: {dye_concentration} %")
-    st.write(f"- Sensibilidad: {sensitivity}")
-    st.write(f"- Tamaño: {tile_size} μm")
+    st.write(f"- Concentración: {dye_concentration_ll} (l/l)")
+    st.write(f"- Sensibilidad: {dye_concentration_gl} (g/l)")
     st.write("**💧 Herbicida**")
     st.write(f"- Nombre: {herbicide}")
-    st.write(f"- Dosis: {dose}")
+    st.write(f"- Dosis: {dose} (l/ha)")
 
     st.markdown("#### 🛠️ Evaluación")
     st.write("**🌾 Modelo de Detección**")
@@ -378,10 +378,10 @@ with tabs[4]:
                         cursor.execute(
                             """INSERT INTO condiciones_ambientales (
                                 ensayo_id, ambient_temperature, wind_speed, 
-                                relative_humidity, wind_direction, ambient_light_intensity
+                                relative_humidity, wind_direction, ambient_light_intensity, cloudiness
                             ) VALUES (?, ?, ?, ?, ?, ?)""",
                             (ensayo_id, ambient_temperature, wind_speed, 
-                            relative_humidity, wind_direction, ambient_light_intensity)
+                            relative_humidity, wind_direction, ambient_light_intensity, cloudiness)
                         )
                         
                         # Insertar cultivo
@@ -409,11 +409,11 @@ with tabs[4]:
                         # Insertar colorante
                         cursor.execute(
                             """INSERT INTO colorante (
-                                ensayo_id, dye_used, dye_manufacturer, dye_concentration, 
-                                sensitivity, tile_size
+                                ensayo_id, dye_used, dye_manufacturer, dye_concentration_ll, 
+                                dye_concentration_gl
                             ) VALUES (?, ?, ?, ?, ?, ?)""",
-                            (ensayo_id, dye_used, dye_manufacturer, dye_concentration, 
-                            sensitivity, tile_size)
+                            (ensayo_id, dye_used, dye_manufacturer, dye_concentration_ll, 
+                            dye_concentration_gl)
                         )
                         
                         # Insertar personal
