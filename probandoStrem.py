@@ -171,16 +171,16 @@ with tabs[0]:
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("🧾 Cliente")
-        name = st.text_input("Nombre del cliente")
+        name = st.text_input("Nombre del cliente *")
         sprai_id = st.text_input("ID del sistema pulverizador")
-        modules_id = st.text_input("ID de los módulos utilizados")
+        modules_id = st.text_input("ID de los módulos utilizados *")
         st.subheader("👷 Personal")
         machine_operator = st.text_input("Operador de la máquina")
-        trial_testers = st.text_input("Evaluadores del ensayo")
+        trial_testers = st.text_input("Evaluadores del ensayo *")
     with col2:
         st.subheader("🗓️ Datos del ensayo")
-        test_date = st.date_input("Fecha del ensayo", value=datetime.date.today())
-        test_time = st.time_input("Hora del ensayo")
+        test_date = st.date_input("Fecha del ensayo *", value=datetime.date.today())
+        test_time = st.time_input("Hora del ensayo *", value=datetime.time(0, 0))
 
 with tabs[1]:
     col1, col2, col3 = st.columns(3)
@@ -188,20 +188,20 @@ with tabs[1]:
         st.subheader("📍 Ubicación")
         farm = st.text_input("Nombre de la finca")
         farm_address = st.text_input("Dirección de la finca")
-        field_location = st.text_input("Ubicación del lote")
+        field_location = st.text_input("Ubicación del lote (link Google Maps) *")
         latitude = st.text_input("Latitud")
         longitude = st.text_input("Longitud")
         soil_type = st.text_input("Tipo de suelo")
     with col2:
         st.subheader("🌦️ Condiciones Ambientales")
         ambient_temperature = st.number_input("Temperatura ambiente (°C)")
-        wind_speed = st.number_input("Velocidad del viento (km/h)")
+        wind_speed = st.number_input("Velocidad del viento (km/h) *")
         relative_humidity = st.number_input("Humedad relativa (%)")
         wind_direction = st.text_input("Dirección del viento")
         ambient_light_intensity = st.number_input("Intensidad de luz")
     with col3:
         st.subheader("🌱 Cultivo")
-        crop_specie = st.text_input("Especie del cultivo")
+        crop_specie = st.text_input("Especie del cultivo *")
         tillage = st.selectbox("¿Suelo labrado?", ["Sí", "No"])
         row_spacing = st.number_input("Distancia entre hileras(cm)")
         crop_population = st.number_input("Población por hectárea")
@@ -218,7 +218,7 @@ with tabs[2]:
         nozzle_droplet_classification = st.text_input("Clasificación de gotas")
         nozzle_spacing = st.number_input("Espaciado de boquillas (cm)")
         boom_height = st.number_input("Altura del botalón (cm)")
-        speed = st.number_input("Velocidad (km/h)")
+        speed = st.number_input("Velocidad de avance (km/h) *")
         spray_pressure = st.number_input("Presión de aplicación (bar)")
         flow_rate = st.number_input("Caudal (L/min)")
     with col2:
@@ -231,7 +231,7 @@ with tabs[2]:
     with col3:
         st.subheader("💧 Herbicida")
         herbicide = st.text_input("Nombre del herbicida")
-        dose = st.text_input("Dosis aplicada")
+        dose = st.text_input("Dosis aplicada (l/ha)")
 
 with tabs[3]:
     col1, col2 = st.columns(2)
@@ -314,129 +314,155 @@ with tabs[4]:
 
     # Solo el botón y el envío están en el formulario
     with st.form("form_envio"):
-        submit = st.form_submit_button("Enviar Formulario Completo")
+        submit_button = st.form_submit_button("Enviar Formulario Completo")
+        
+        if submit_button:
+            errores = []
+            
+            if not name:
+                errores.append("El nombre del cliente es obligatorio.")
+            if not modules_id:
+                errores.append("El ID de los módulos es obligatorio.")
+            if not trial_testers:
+                errores.append("Los evaluadores del ensayo son obligatorios.")
+            if not test_date:
+                errores.append("La fecha del ensayo es obligatoria.")
+            if not test_time:
+                errores.append("La hora del ensayo es obligatoria.")
+            if not field_location:
+                errores.append("La ubicación del lote es obligatoria.")
+            if not wind_speed:
+                errores.append("La velocidad del viento es obligatoria.")
+            if not crop_specie:
+                errores.append("La especie del cultivo es obligatoria.")
+            if not speed:
+                errores.append("La velocidad de la pulverizadora es obligatoria.")
 
-if submit and conn is not None:
-    try:
-        cursor = conn.cursor()
-        
-        # Insertar cliente primero
-        cursor.execute(
-            "INSERT INTO clientes (name, sprai_id, modules_id) VALUES (?, ?, ?)",
-            (name, sprai_id, modules_id)
-        )
+            # Mostrar errores
+            if errores:
+                for error in errores:
+                    st.error(error)
+            else:
+                # Solo proceder si no hay errores y hay conexión a la BD
+                if conn is not None:
+                    try:
+                        cursor = conn.cursor()
 
-        cliente_id = cursor.lastrowid
-        
-        # Insertar ensayo
-        cursor.execute(
-            "INSERT INTO ensayos (cliente_id, test_date, test_time) VALUES (?, ?, ?)",  # Nota la coma al final
-            (cliente_id, test_date, str(test_time))
-        )
+                        # Insertar cliente primero
+                        cursor.execute(
+                            "INSERT INTO clientes (name, sprai_id, modules_id) VALUES (?, ?, ?)",
+                            (name, sprai_id, modules_id)
+                        )
 
-        ensayo_id = cursor.lastrowid 
+                        cliente_id = cursor.lastrowid
+                        
+                        # Insertar ensayo
+                        cursor.execute(
+                            "INSERT INTO ensayos (cliente_id, test_date, test_time) VALUES (?, ?, ?)",  # Nota la coma al final
+                            (cliente_id, test_date, str(test_time))
+                        )
 
-        # Insertar ubicación
-        cursor.execute(
-            """INSERT INTO ubicacion (
-                ensayo_id, farm, farm_address, field_location, 
-                latitude, longitude, soil_type
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (ensayo_id, farm, farm_address, field_location, 
-            latitude, longitude, soil_type)
-        )
-        
-        # Insertar condiciones ambientales
-        cursor.execute(
-            """INSERT INTO condiciones_ambientales (
-                ensayo_id, ambient_temperature, wind_speed, 
-                relative_humidity, wind_direction, ambient_light_intensity
-            ) VALUES (?, ?, ?, ?, ?, ?)""",
-            (ensayo_id, ambient_temperature, wind_speed, 
-            relative_humidity, wind_direction, ambient_light_intensity)
-        )
-        
-        # Insertar cultivo
-        cursor.execute(
-            """INSERT INTO cultivo (
-                ensayo_id, crop_specie, tillage, row_spacing, 
-                crop_population, crop_stage
-            ) VALUES (?, ?, ?, ?, ?, ?)""",
-            (ensayo_id, crop_specie, tillage, row_spacing, 
-            crop_population, crop_stage)
-        )
-        
-        # Insertar pulverizadora
-        cursor.execute(
-            """INSERT INTO pulverizadora (
-                ensayo_id, sprayer_manufacturer, sprayer_model_number, 
-                sprayer_year, nozzle_nomenclature, nozzle_droplet_classification, 
-                nozzle_spacing, boom_height, speed, spray_pressure, flow_rate
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (ensayo_id, sprayer_manufacturer, sprayer_model_number, 
-            sprayer_year, nozzle_nomenclature, nozzle_droplet_classification, 
-            nozzle_spacing, boom_height, speed, spray_pressure, flow_rate)
-        )
-        
-        # Insertar colorante
-        cursor.execute(
-            """INSERT INTO colorante (
-                ensayo_id, dye_used, dye_manufacturer, dye_concentration, 
-                sensitivity, tile_size
-            ) VALUES (?, ?, ?, ?, ?, ?)""",
-            (ensayo_id, dye_used, dye_manufacturer, dye_concentration, 
-            sensitivity, tile_size)
-        )
-        
-        # Insertar personal
-        cursor.execute(
-            """INSERT INTO personal (
-                ensayo_id, machine_operator, trial_testers
-            ) VALUES (?, ?, ?)""",
-            (ensayo_id, machine_operator, trial_testers)
-        )
-        
-        # Insertar herbicida
-        cursor.execute(
-            """INSERT INTO herbicida (
-                ensayo_id, herbicide, dose
-            ) VALUES (?, ?, ?)""",
-            (ensayo_id, herbicide, dose)
-        )
-        
-        # Insertar modelo de detección
-        cursor.execute(
-            """INSERT INTO modelo_deteccion (
-                ensayo_id, sens, tile
-            ) VALUES (?, ?, ?)""",
-            (ensayo_id, sens, tile)
-        )
-        
-        # Procesar archivo CSV si existe
-        if csv_file:
-            try:
-                csv_data = pd.read_csv(csv_file)
-                for _, row in csv_data.iterrows():
-                    cursor.execute(
-                        """INSERT INTO resultados_malezas (
-                            ensayo_id, uploader, weed_diameter, size, height,
-                            weed_placement, weed_type, weed_name
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (ensayo_id, uploader, row.get('weed_diameter'), row.get('size'),
-                        row.get('height'), row.get('weed_placement'), 
-                        row.get('weed_type'), row.get('weed_name'))
-                    )
-            except Exception as e:
-                st.warning(f"Advertencia: No se pudo procesar el archivo CSV. Error: {str(e)}")
-        
-        conn.commit()
-        st.success("✅ Formulario enviado correctamente a la base de datos")
-        st.balloons()
-        
-    except Exception as e:
-        conn.rollback()
-        st.error(f"Error al enviar el formulario: {str(e)}")
-    finally:
-        conn.close()
-elif submit and conn is None:
-    st.error("No se pudo conectar a la base de datos. No se guardó la información.")
+                        ensayo_id = cursor.lastrowid 
+
+                        # Insertar ubicación
+                        cursor.execute(
+                            """INSERT INTO ubicacion (
+                                ensayo_id, farm, farm_address, field_location, 
+                                latitude, longitude, soil_type
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                            (ensayo_id, farm, farm_address, field_location, 
+                            latitude, longitude, soil_type)
+                        )
+                        
+                        # Insertar condiciones ambientales
+                        cursor.execute(
+                            """INSERT INTO condiciones_ambientales (
+                                ensayo_id, ambient_temperature, wind_speed, 
+                                relative_humidity, wind_direction, ambient_light_intensity
+                            ) VALUES (?, ?, ?, ?, ?, ?)""",
+                            (ensayo_id, ambient_temperature, wind_speed, 
+                            relative_humidity, wind_direction, ambient_light_intensity)
+                        )
+                        
+                        # Insertar cultivo
+                        cursor.execute(
+                            """INSERT INTO cultivo (
+                                ensayo_id, crop_specie, tillage, row_spacing, 
+                                crop_population, crop_stage
+                            ) VALUES (?, ?, ?, ?, ?, ?)""",
+                            (ensayo_id, crop_specie, tillage, row_spacing, 
+                            crop_population, crop_stage)
+                        )
+                        
+                        # Insertar pulverizadora
+                        cursor.execute(
+                            """INSERT INTO pulverizadora (
+                                ensayo_id, sprayer_manufacturer, sprayer_model_number, 
+                                sprayer_year, nozzle_nomenclature, nozzle_droplet_classification, 
+                                nozzle_spacing, boom_height, speed, spray_pressure, flow_rate
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            (ensayo_id, sprayer_manufacturer, sprayer_model_number, 
+                            sprayer_year, nozzle_nomenclature, nozzle_droplet_classification, 
+                            nozzle_spacing, boom_height, speed, spray_pressure, flow_rate)
+                        )
+                        
+                        # Insertar colorante
+                        cursor.execute(
+                            """INSERT INTO colorante (
+                                ensayo_id, dye_used, dye_manufacturer, dye_concentration, 
+                                sensitivity, tile_size
+                            ) VALUES (?, ?, ?, ?, ?, ?)""",
+                            (ensayo_id, dye_used, dye_manufacturer, dye_concentration, 
+                            sensitivity, tile_size)
+                        )
+                        
+                        # Insertar personal
+                        cursor.execute(
+                            """INSERT INTO personal (
+                                ensayo_id, machine_operator, trial_testers
+                            ) VALUES (?, ?, ?)""",
+                            (ensayo_id, machine_operator, trial_testers)
+                        )
+                        
+                        # Insertar herbicida
+                        cursor.execute(
+                            """INSERT INTO herbicida (
+                                ensayo_id, herbicide, dose
+                            ) VALUES (?, ?, ?)""",
+                            (ensayo_id, herbicide, dose)
+                        )
+                        
+                        # Insertar modelo de detección
+                        cursor.execute(
+                            """INSERT INTO modelo_deteccion (
+                                ensayo_id, sens, tile
+                            ) VALUES (?, ?, ?)""",
+                            (ensayo_id, sens, tile)
+                        )
+                        
+                        # Procesar archivo CSV si existe
+                        if csv_file:
+                            try:
+                                csv_data = pd.read_csv(csv_file)
+                                for _, row in csv_data.iterrows():
+                                    cursor.execute(
+                                        """INSERT INTO resultados_malezas (
+                                            ensayo_id, uploader, weed_diameter, size, height,
+                                            weed_placement, weed_type, weed_name
+                                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                                        (ensayo_id, uploader, row.get('weed_diameter'), row.get('size'),
+                                        row.get('height'), row.get('weed_placement'), 
+                                        row.get('weed_type'), row.get('weed_name'))
+                                    )
+                            except Exception as e:
+                                st.warning(f"Advertencia: No se pudo procesar el archivo CSV. Error: {str(e)}")
+                        
+                        conn.commit()
+                        st.success("✅ Formulario enviado correctamente a la base de datos")
+                        st.balloons()
+                        
+                    except Exception as e:
+                        conn.rollback()
+                        st.error(f"Error al enviar el formulario: {str(e)}")
+                else:
+                    st.error("No se pudo conectar a la base de datos. No se guardó la información.")
