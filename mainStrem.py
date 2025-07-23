@@ -253,8 +253,8 @@ with tabs[1]:
         farm = st.text_input("Nombre de la finca")
         farm_address = st.text_input("Dirección de la finca")
         field_location = st.text_input("Ubicación del lote (link Google Maps) *")
-        latitude = st.text_input("Latitud")
-        longitude = st.text_input("Longitud")
+        latitude = st.number_input("Latitud")
+        longitude = st.number_input("Longitud")
         soil_type = st.text_input("Tipo de suelo")
     with col2:
         st.subheader("🌦️ Condiciones Ambientales")
@@ -614,7 +614,7 @@ if st.session_state.get("role") == "desarrollador" and len(tabs) > 5:
 
             # SECCIÓN PARA RESETEO COMPLETO (MANTENIMIENTO)
             st.markdown("---")
-            st.subheader("🛠️ Mantenimiento de Base de Datos")
+            st.subheader("🧹 Limpieza de Datos")
 
             st.warning("ADVERTENCIA: Esta acción eliminará TODOS los ensayos de forma permanente.")
 
