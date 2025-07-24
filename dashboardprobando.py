@@ -31,10 +31,15 @@ def obtener_datos_aplico():
         JOIN ensayos e ON p.ensayo_id = e.ensayo_id
         JOIN resultados_malezas r ON e.ensayo_id = r.ensayo_id
         LEFT JOIN modelo_deteccion m ON e.ensayo_id = m.ensayo_id
-        WHERE r.weed_applied IS NOT NULL AND (p.speed IS NOT NULL OR m.sens IS NOT NULL)
+        WHERE r.weed_applied IS NOT NULL 
+        AND (p.speed IS NOT NULL OR m.sens IS NOT NULL)
     """
     df = pd.read_sql_query(query, conn)
     conn.close()
+    # Convertir sensibilidad a entero y filtrar solo valores 1, 2, 3
+    if 'sensitivity' in df.columns:
+        df['sensitivity'] = pd.to_numeric(df['sensitivity'], errors='coerce')
+        df = df[df['sensitivity'].isin([1, 2, 3]) | df['sensitivity'].isna()]
     return df
 
 # Obtener datos
@@ -79,8 +84,8 @@ app.layout = html.Div([
     html.Hr(),
     dcc.RadioItems(
         options=[
-            {'label': 'Velocidad de avance', 'value': 'speed'},
-            {'label': 'Sensibilidad', 'value': 'sensitivity'}
+            {'label': 'Velocidad de avance (km/h)', 'value': 'speed'},
+            {'label': 'Nivel de sensibilidad (1-3)', 'value': 'sensitivity'}
         ],
         value='speed',
         id='tipo-grafico-radio',
@@ -101,28 +106,30 @@ def actualizar_grafico(tipo_grafico):
     if tipo_grafico == 'speed':
         # Crear rangos de velocidad
         df_aplico['rango'] = pd.cut(df_aplico['speed'], bins=[0, 5, 10, 15, 20, 25], 
-                                   labels=["0–5", "5–10", "10–15", "15–20", "20–25"])
+                                   labels=["0-5", "5-10", "10-15", "15-20", "20-25"])
         titulo = "Aplicación de herbicida según velocidad de avance"
         etiqueta_x = "Rango de velocidad (km/h)"
     else:
-        # Crear rangos de sensibilidad (ajusta los bins según tus necesidades)
-        df_aplico['rango'] = pd.cut(df_aplico['sensitivity'], bins=5)
-        titulo = "Aplicación de herbicida según sensibilidad"
-        etiqueta_x = "Rango de sensibilidad"
+        # Usar valores discretos de sensibilidad
+        df_aplico['rango'] = df_aplico['sensitivity'].astype(str)
+        titulo = "Aplicación de herbicida según nivel de sensibilidad"
+        etiqueta_x = "Nivel de sensibilidad (1-3)"
     
     fig = px.histogram(
-        df_aplico,
+        df_aplico.dropna(subset=['rango']),
         x='rango',
         color='weed_applied',
         barmode='stack',
-        labels={'weed_applied': 'Aplicado'},
-        category_orders={"weed_applied": [0, 1]},
+        labels={'weed_applied': 'Aplicado', 'rango': etiqueta_x},
+        category_orders={"weed_applied": [0, 1], 
+                        "rango": ["1", "2", "3"] if tipo_grafico == 'sensitivity' else None},
         title=titulo
     )
     
     fig.update_layout(
         xaxis_title=etiqueta_x,
-        yaxis_title="Cantidad de aplicaciones"
+        yaxis_title="Cantidad de Malezas",
+        xaxis={'type': 'category'}
     )
     
     return fig
