@@ -1,28 +1,40 @@
-import sqlite3
-from dash import Dash, html, dash_table
+# Importar librerías necesarias
+from dash import Dash, html, dash_table, dcc, callback, Input, Output
 import pandas as pd
+import plotly.express as px # Contruir gráficos
+import dash_design_kit as ddk
 
-app = Dash(__name__)
+# dcc: incluye componentes graficos
+# html: incluye componentes de HTML
+# dash_table: incluye componentes de tablas
+# dash: es el framework principal
 
-# Conexión a la base de datos
-conn = sqlite3.connect('ensayos.db')  # Asegúrate de que la ruta sea correcta
 
-# Consulta SQL para obtener datos (ejemplo)
-query = "SELECT * FROM tabla_ensayos"  # Reemplaza "tabla_ensayos" con tu tabla real
-df = pd.read_sql_query(query, conn)
+# Incorporar datos
+df = pd.read_csv('https://raw.githubusercontent.com/plotly/datasets/master/gapminder2007.csv')
 
-# Cerrar conexión
-conn.close()
+# Inicializar la aplicación Dash
+app = Dash()
 
-# Mostrar los datos en una tabla de Dash
-app.layout = html.Div([
-    html.H1("Datos de Ensayos"),
-    dash_table.DataTable(
-        data=df.to_dict('records'),
-        columns=[{'name': col, 'id': col} for col in df.columns],
-        page_size=10
-    )
-])
+# Definir el layout de la aplicación
+# App layout
+app.layout = [
+    html.Div(children='My First App with Data, Graph, and Controls'),
+    html.Hr(),
+    dcc.RadioItems(options=['pop', 'lifeExp', 'gdpPercap'], value='lifeExp', id='controls-and-radio-item'),
+    dash_table.DataTable(data=df.to_dict('records'), page_size=6),
+    dcc.Graph(figure={}, id='controls-and-graph')
+]
 
+# Add controls to build the interaction
+@callback(
+    Output(component_id='controls-and-graph', component_property='figure'),
+    Input(component_id='controls-and-radio-item', component_property='value')
+)
+def update_graph(col_chosen):
+    fig = px.histogram(df, x='continent', y=col_chosen, histfunc='avg')
+    return fig
+
+# Correr la aplicación
 if __name__ == '__main__':
     app.run(debug=True)
