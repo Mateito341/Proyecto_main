@@ -103,36 +103,78 @@ app.layout = html.Div([
     Input('tipo-grafico-radio', 'value')
 )
 def actualizar_grafico(tipo_grafico):
+    df = df_aplico.copy()
+    
     if tipo_grafico == 'speed':
-        # Crear rangos de velocidad
-        df_aplico['rango'] = pd.cut(df_aplico['speed'], bins=[0, 5, 10, 15, 20, 25], 
-                                   labels=["0-5", "5-10", "10-15", "15-20", "20-25"])
-        titulo = "Aplicación de herbicida según velocidad de avance"
+        df['rango'] = pd.cut(df['speed'], bins=[0, 5, 10, 15, 20, 25], 
+                             labels=["0-5", "5-10", "10-15", "15-20", "20-25"])
+        titulo = "Porcentaje de malezas aplicadas según velocidad"
         etiqueta_x = "Rango de velocidad (km/h)"
     else:
-        # Usar valores discretos de sensibilidad
-        df_aplico['rango'] = df_aplico['sensitivity'].astype(str)
-        titulo = "Aplicación de herbicida según nivel de sensibilidad"
+        df['rango'] = df['sensitivity'].astype(str)
+        titulo = "Porcentaje de malezas aplicadas según sensibilidad"
         etiqueta_x = "Nivel de sensibilidad (1-3)"
     
-    fig = px.histogram(
-        df_aplico.dropna(subset=['rango']),
+    df = df.dropna(subset=['rango', 'weed_applied'])
+
+    # Agrupar y calcular porcentaje
+    grupo = df.groupby(['rango', 'weed_applied']).size().reset_index(name='count')
+    total_por_rango = grupo.groupby('rango')['count'].transform('sum')
+    grupo['percentage'] = grupo['count'] / total_por_rango * 100
+
+    # Reemplazar valores para mostrar etiquetas legibles
+    grupo['Aplicado'] = grupo['weed_applied'].replace({0: 'No aplicado', 1: 'Aplicado'})
+
+    # Forzar orden deseado (Aplicado abajo, No aplicado arriba)
+    orden_apilado = ['Aplicado', 'No aplicado']
+
+    fig = px.bar(
+        grupo,
         x='rango',
-        color='weed_applied',
+        y='percentage',
+        color='Aplicado',
+        labels={'rango': etiqueta_x, 'percentage': 'Porcentaje'},
+        title=titulo,
         barmode='stack',
-        labels={'weed_applied': 'Aplicado', 'rango': etiqueta_x},
-        category_orders={"weed_applied": [0, 1], 
-                        "rango": ["1", "2", "3"] if tipo_grafico == 'sensitivity' else None},
-        title=titulo
+        category_orders={'Aplicado': ['Aplicado', 'No aplicado']},
+        color_discrete_map={
+                'Aplicado': "#14b91c",                     # Verde fuerte
+                'No aplicado': 'rgba(46, 125, 50, 0.2)'     # Verde claro y transparente
+            }
     )
-    
+
     fig.update_layout(
-        xaxis_title=etiqueta_x,
-        yaxis_title="Cantidad de Malezas",
-        xaxis={'type': 'category'}
+        yaxis=dict(title='Porcentaje (%)', range=[-10, 100]),  # espacio extra abajo
+        xaxis=dict(title=etiqueta_x, type='category'),
+        uniformtext_minsize=10,
+        uniformtext_mode='hide',
+        margin=dict(b=80)  # margen inferior para que no se corte
     )
-    
+
+    fig.add_shape(
+        type='line',
+        x0=-0.5,
+        x1=len(grupo['rango'].unique()) - 0.5,
+        y0=90,
+        y1=90,
+        line=dict(color='red', width=2, dash='dash'),
+        xref='x',
+        yref='y'
+    )
+
+    totales = grupo.groupby('rango')['count'].sum().reset_index()
+    for i, row in totales.iterrows():
+        fig.add_annotation(
+            x=row['rango'],
+            y=-5,  # debajo del eje
+            text=f"{int(row['count'])} ensayos",
+            showarrow=False,
+            font=dict(size=12, color='gray'),
+            yanchor='top'
+    )
+
     return fig
+
 
 # Ejecutar
 if __name__ == '__main__':
