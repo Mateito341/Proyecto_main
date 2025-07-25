@@ -2,6 +2,7 @@
 from dash import Dash, html, dash_table, dcc, callback, Input, Output
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import sqlite3
 
 def obtener_datos_mapa():
@@ -84,13 +85,13 @@ app.layout = html.Div([
     html.Hr(),
     dcc.RadioItems(
         options=[
-            {'label': 'Velocidad de avance (km/h)', 'value': 'speed'},
-            {'label': 'Nivel de sensibilidad (1-3)', 'value': 'sensitivity'}
+            {'label': 'Velocidad de avance', 'value': 'speed'},
+            {'label': 'Nivel de sensibilidad', 'value': 'sensitivity'}
         ],
         value='speed',
         id='tipo-grafico-radio',
         inline=True,
-        style={'marginBottom': '20px'}
+        style={'marginBottom': '10px'}
     ),
     
     dcc.Graph(
@@ -111,50 +112,64 @@ def actualizar_grafico(tipo_grafico):
         titulo = "Porcentaje de malezas aplicadas según velocidad"
         etiqueta_x = "Rango de velocidad (km/h)"
     else:
-        df['rango'] = df['sensitivity'].astype(str)
+        df = df.dropna(subset=['sensitivity'])
+        df['rango'] = df['sensitivity'].astype(int).astype(str)
         titulo = "Porcentaje de malezas aplicadas según sensibilidad"
-        etiqueta_x = "Nivel de sensibilidad (1-3)"
+        etiqueta_x = "Nivel de sensibilidad"
     
     df = df.dropna(subset=['rango', 'weed_applied'])
 
-    # Agrupar y calcular porcentaje
-    grupo = df.groupby(['rango', 'weed_applied']).size().reset_index(name='count')
-    total_por_rango = grupo.groupby('rango')['count'].transform('sum')
-    grupo['percentage'] = grupo['count'] / total_por_rango * 100
+    # Calcular porcentaje promedio aplicado y conteo
+    porcentajes = df.groupby('rango')['weed_applied'].mean() * 100
+    counts = df.groupby('rango').size()
+    
+    # Para sensibilidad, asegurar que todas las categorías estén presentes
+    if tipo_grafico == 'sensitivity':
+        # Crear un índice completo con todos los niveles de sensibilidad
+        niveles_completos = ['1', '2', '3']
+        porcentajes = porcentajes.reindex(niveles_completos, fill_value=0)
+        counts = counts.reindex(niveles_completos, fill_value=0)
+    
+    plot_data = pd.DataFrame({
+        'rango': porcentajes.index,
+        'porcentaje': porcentajes.values,
+        'count': counts.values
+    })
+    
+    # Para velocidad, ordenar por rango
+    if tipo_grafico == 'speed':
+        plot_data = plot_data.sort_values('rango')
 
-    # Reemplazar valores para mostrar etiquetas legibles
-    grupo['Aplicado'] = grupo['weed_applied'].replace({0: 'No aplicado', 1: 'Aplicado'})
+    # Crear figura vacía
+    fig = go.Figure()
 
-    # Forzar orden deseado (Aplicado abajo, No aplicado arriba)
-    orden_apilado = ['Aplicado', 'No aplicado']
+    # Agregar barras
+    fig.add_trace(go.Bar(
+        x=plot_data['rango'],
+        y=plot_data['porcentaje'],
+        name='Porcentaje aplicado',
+        marker_color='#008148',
+        text=[f"{p:.1f}%" if p > 0 else "" for p in plot_data['porcentaje']],
+        textposition='auto'
+    ))
 
-    fig = px.bar(
-        grupo,
-        x='rango',
-        y='percentage',
-        color='Aplicado',
-        labels={'rango': etiqueta_x, 'percentage': 'Porcentaje'},
-        title=titulo,
-        barmode='stack',
-        category_orders={'Aplicado': ['Aplicado', 'No aplicado']},
-        color_discrete_map={
-                'Aplicado': "#14b91c",                     # Verde fuerte
-                'No aplicado': 'rgba(46, 125, 50, 0.2)'     # Verde claro y transparente
-            }
-    )
+    # Agregar línea solo si hay más de un punto con datos
+    datos_con_valores = plot_data[plot_data['porcentaje'] > 0]
+    if len(datos_con_valores) > 1:
+        fig.add_trace(go.Scatter(
+            x=datos_con_valores['rango'],
+            y=datos_con_valores['porcentaje'],
+            mode='lines+markers',
+            name='Tendencia',
+            line=dict(color='#EF8A17', width=3),
+            marker=dict(size=8)
+        ))
 
-    fig.update_layout(
-        yaxis=dict(title='Porcentaje (%)', range=[-10, 100]),  # espacio extra abajo
-        xaxis=dict(title=etiqueta_x, type='category'),
-        uniformtext_minsize=10,
-        uniformtext_mode='hide',
-        margin=dict(b=80)  # margen inferior para que no se corte
-    )
-
+    # Línea horizontal en 90%
     fig.add_shape(
         type='line',
         x0=-0.5,
-        x1=len(grupo['rango'].unique()) - 0.5,
+        x1=len(plot_data['rango']) - 0.5,
         y0=90,
         y1=90,
         line=dict(color='red', width=2, dash='dash'),
@@ -162,19 +177,35 @@ def actualizar_grafico(tipo_grafico):
         yref='y'
     )
 
-    totales = grupo.groupby('rango')['count'].sum().reset_index()
-    for i, row in totales.iterrows():
-        fig.add_annotation(
-            x=row['rango'],
-            y=-5,  # debajo del eje
-            text=f"{int(row['count'])} ensayos",
-            showarrow=False,
-            font=dict(size=12, color='gray'),
-            yanchor='top'
+    # Añadir anotaciones de conteo de ensayos
+    for i, row in plot_data.iterrows():
+        if row['count'] > 0:
+            fig.add_annotation(
+                x=row['rango'],
+                y=0,  # Anclar en la base de la barra
+                text=f"{int(row['count'])} ensayos",
+                showarrow=False,
+                font=dict(size=10, color='gray'),
+                yanchor='bottom'  # Lo coloca debajo de la barra
+            )
+
+    # Configuración específica del eje X para sensibilidad
+    if tipo_grafico == 'sensitivity':
+        fig.update_xaxes(
+            type='category',  # Forzar tratamiento como categorías
+            categoryorder='array',
+            categoryarray=['1', '2', '3']  # Orden específico
+        )
+
+    fig.update_layout(
+        title=titulo,
+        xaxis_title=etiqueta_x,
+        yaxis_title='Porcentaje aplicado (%)',
+        yaxis=dict(range=[-10, 105]),
+        margin=dict(b=80)
     )
 
     return fig
-
 
 # Ejecutar
 if __name__ == '__main__':
