@@ -117,6 +117,7 @@ def actualizar_grafico(tipo_grafico):
         titulo = "Porcentaje de malezas aplicadas según sensibilidad"
         etiqueta_x = "Nivel de sensibilidad"
     
+    # elimina filas con valores nulos en 'rango' y 'weed_applied'
     df = df.dropna(subset=['rango', 'weed_applied'])
 
     # Calcular porcentaje promedio aplicado y conteo
@@ -150,7 +151,9 @@ def actualizar_grafico(tipo_grafico):
         name='Porcentaje aplicado',
         marker_color='#008148',
         text=[f"{p:.1f}%" if p > 0 else "" for p in plot_data['porcentaje']],
-        textposition='auto'
+        textposition='auto',
+        width=0.5,
+        hoverinfo='x+y',
     ))
 
     # Agregar línea solo si hay más de un punto con datos
@@ -177,18 +180,6 @@ def actualizar_grafico(tipo_grafico):
         yref='y'
     )
 
-    # Añadir anotaciones de conteo de ensayos
-    for i, row in plot_data.iterrows():
-        if row['count'] > 0:
-            fig.add_annotation(
-                x=row['rango'],
-                y=0,  # Anclar en la base de la barra
-                text=f"{int(row['count'])} ensayos",
-                showarrow=False,
-                font=dict(size=10, color='gray'),
-                yanchor='bottom'  # Lo coloca debajo de la barra
-            )
-
     # Configuración específica del eje X para sensibilidad
     if tipo_grafico == 'sensitivity':
         fig.update_xaxes(
@@ -197,12 +188,24 @@ def actualizar_grafico(tipo_grafico):
             categoryarray=['1', '2', '3']  # Orden específico
         )
 
+    # Personalizar tooltip para incluir la cantidad de ensayos
+    fig.data[0].hovertemplate = (
+        f"<b>%{{x}}</b><br>"
+        "Porcentaje aplicado: %{y:.1f}%<br>"
+        "Cantidad de ensayos: %{customdata[0]}<extra></extra>"
+    )
+
+    # Agregar datos personalizados (cantidad de ensayos)
+    fig.data[0].customdata = plot_data[['count']].values
+        
+
+
     fig.update_layout(
         title=titulo,
         xaxis_title=etiqueta_x,
         yaxis_title='Porcentaje aplicado (%)',
         yaxis=dict(range=[-10, 105]),
-        margin=dict(b=80)
+        margin=dict(b=100)
     )
 
     return fig
