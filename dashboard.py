@@ -88,8 +88,8 @@ def crear_grafico(tipo_grafico, df, variable_analisis='weed_applied'):
         titulo = f"Por sensibilidad (1-3)"
         etiqueta_x = "Nivel de sensibilidad"
     elif tipo_grafico == 'size':
-        df['size'] = pd.to_numeric(df['size'], errors='coerce')  # Forzar a numérico, NaN si no se puede
-        df = df.dropna(subset=['size'])  # Eliminar filas donde no se pudo convertir
+        df['size'] = pd.to_numeric(df['size'], errors='coerce')
+        df = df.dropna(subset=['size'])
         df['rango'] = pd.cut(df['size'], bins=[0, 5, 10, 15, 20, 25], 
                             labels=["0-5", "5-10", "10-15", "15-20", "20-25"])
         titulo = f"Por tamaño de maleza (cm)"
@@ -125,8 +125,6 @@ def crear_grafico(tipo_grafico, df, variable_analisis='weed_applied'):
         titulo = f"Por especie de cultivo"
         etiqueta_x = "Especie de cultivo"
 
-
-    
     df = df.dropna(subset=['rango', variable_analisis])
 
     # Cálculo de métricas
@@ -143,7 +141,6 @@ def crear_grafico(tipo_grafico, df, variable_analisis='weed_applied'):
         metricas = metricas.reindex(niveles_completos, fill_value=0)
         counts = counts.reindex(niveles_completos, fill_value=0)
 
-    # Para categorías conocidas, asegurar todas están presentes
     if tipo_grafico == 'weed_type':
         niveles_completos = ['HA', 'G']
         metricas = metricas.reindex(niveles_completos, fill_value=0)
@@ -160,36 +157,31 @@ def crear_grafico(tipo_grafico, df, variable_analisis='weed_applied'):
         counts = counts.reindex(niveles_completos, fill_value=0)
     
     plot_data = pd.DataFrame({
-        'rango': metricas.index,
+        'rango': metricas.index.astype(str).str.strip(),
         'valor': metricas.values,
         'count': counts.values
     })
     
-    if tipo_grafico == 'speed':
-        plot_data = plot_data.sort_values('rango')
-
-    if tipo_grafico == 'wind_speed':
-        plot_data = plot_data.sort_values('rango')
-
-    if tipo_grafico == 'size':
+    # Ordenar si corresponde
+    if tipo_grafico in ['speed', 'wind_speed', 'size']:
         plot_data = plot_data.sort_values('rango')
 
     fig = go.Figure()
 
-    # Gráfico de barras principal verdes
+    # Colores condicionales
+    colors = ['#008148' if val >= 90 else '#FF0000' for val in plot_data['valor']] if variable_analisis == 'weed_applied' else '#008148'
+    
     fig.add_trace(go.Bar(
         x=plot_data['rango'],
         y=plot_data['valor'],
         name=variable_analisis.replace('_', ' '),
-        marker_color='#008148',
-        text=[f"{v:.1f}%" if variable_analisis == 'weed_applied' else f"{v:.1f}" 
-            for v in plot_data['valor']],
+        marker_color=colors,
+        text=[f"{v:.1f}%" if variable_analisis == 'weed_applied' else f"{v:.1f}" for v in plot_data['valor']],
         textposition='auto',
         width=0.5,
         hoverinfo='x+y',
     ))
 
-    # Grafico de tendencia naranja
     datos_con_valores = plot_data[plot_data['valor'] > 0]
     if len(datos_con_valores) > 1:
         fig.add_trace(go.Scatter(
@@ -200,6 +192,18 @@ def crear_grafico(tipo_grafico, df, variable_analisis='weed_applied'):
             line=dict(color='#EF8A17', width=3),
             marker=dict(size=8)
         ))
+
+    # Anotaciones con índice numérico para evitar desplazamiento
+    for i, row in enumerate(plot_data.itertuples()):
+        fig.add_annotation(
+            x=i,
+            y=-2,
+            text=f"{int(row.count)} ensayos",
+            showarrow=False,
+            font=dict(size=10, color="black"),
+            xanchor='center',
+            yanchor='top'
+        )
 
     if variable_analisis == 'weed_applied':
         fig.add_shape(
@@ -213,6 +217,7 @@ def crear_grafico(tipo_grafico, df, variable_analisis='weed_applied'):
             yref='y'
         )
 
+    # Definir eje X categórico y orden específico
     if tipo_grafico == 'sensitivity':
         fig.update_xaxes(
             type='category',
@@ -241,27 +246,27 @@ def crear_grafico(tipo_grafico, df, variable_analisis='weed_applied'):
             categoryarray=['HA', 'G']
         )
 
-    # Nota de porcentaje y cantdida de ensayos
+    # Tooltip con datos
     fig.data[0].hovertemplate = (
         f"<b>%{{x}}</b><br>"
-        f"{variable_analisis.replace('_', ' ').title()}: %{{y:.1f}}"
+        f"{'Porcentaje aplicado' if variable_analisis == 'weed_applied' else variable_analisis.replace('_', ' ').title()}: %{{y:.1f}}"
         f"{'%' if variable_analisis == 'weed_applied' else ''}<br>"
         "Cantidad de malezas: %{customdata[0]}<extra></extra>"
     )
-
     fig.data[0].customdata = plot_data[['count']].values
         
     fig.update_layout(
         title=titulo,
         xaxis_title=etiqueta_x,
-        yaxis_title=variable_analisis.replace('_', ' ').title() + 
-                (' (%)' if variable_analisis == 'weed_applied' else ''),
+        yaxis_title="Porcentaje aplicado (%)" if variable_analisis == 'weed_applied' else variable_analisis.replace('_', ' ').title(),
         yaxis=dict(range=[-10, 105] if variable_analisis == 'weed_applied' else None),
-        margin=dict(b=100, t=50),
-        height=400
+        margin=dict(b=140, t=50),
+        height=400,
+        showlegend=False
     )
 
     return fig
+
 
 # Crear todos los gráficos
 fig_velocidad = crear_grafico('speed', df_aplico.copy())
