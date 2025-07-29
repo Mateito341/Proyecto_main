@@ -90,10 +90,19 @@ def crear_grafico(tipo_grafico, df, variable_analisis='weed_applied'):
     elif tipo_grafico == 'size':
         df['size'] = pd.to_numeric(df['size'], errors='coerce')
         df = df.dropna(subset=['size'])
-        df['rango'] = pd.cut(df['size'], bins=[0, 5, 10, 15, 20, 25], 
-                            labels=["0-5", "5-10", "10-15", "15-20", "20-25"])
+
+        # Agregar bin extra para >25
+        bins = [0, 5, 10, 15, 20, 25, float('inf')]
+        labels = ["0-5", "5-10", "10-15", "15-20", "20-25", ">25"]
+
+        df['rango'] = pd.cut(df['size'], bins=bins, labels=labels, right=False)
+
         titulo = f"Por tamaño de maleza (cm)"
         etiqueta_x = "Tamaño"
+
+        # Asegurar orden correcto en el gráfico
+        orden_size = ["0-5", "5-10", "10-15", "15-20", "20-25", ">25"]
+        df['rango'] = pd.Categorical(df['rango'], categories=orden_size, ordered=True)
     elif tipo_grafico == 'weed_placement':
         df = df.dropna(subset=['weed_placement'])
         df['rango'] = df['weed_placement'].astype(str)
@@ -161,6 +170,22 @@ def crear_grafico(tipo_grafico, df, variable_analisis='weed_applied'):
         'valor': metricas.values,
         'count': counts.values
     })
+
+    # Ordenar rangos
+    if tipo_grafico == 'size':
+        orden_size = ["0-5", "5-10", "10-15", "15-20", "20-25", ">25"]
+        plot_data['rango'] = pd.Categorical(plot_data['rango'], categories=orden_size, ordered=True)
+        plot_data = plot_data.sort_values('rango')
+
+    if tipo_grafico == 'speed':
+        orden_speed = ["0-5", "5-10", "10-15", "15-20", "20-25"]
+        plot_data['rango'] = pd.Categorical(plot_data['rango'], categories=orden_speed, ordered=True)
+        plot_data = plot_data.sort_values('rango')
+
+    if tipo_grafico == 'wind_speed':
+        orden_wind = ["0-5", "5-10", "10-15", "15-20", "20-25"]
+        plot_data['rango'] = pd.Categorical(plot_data['rango'], categories=orden_wind, ordered=True)
+        plot_data = plot_data.sort_values('rango')
     
     # Ordenar si corresponde
     if tipo_grafico in ['speed', 'wind_speed', 'size']:
@@ -278,7 +303,8 @@ def crear_opciones_filtro(columna):
                 {'label': '5-10 cm', 'value': '5-10'},
                 {'label': '10-15 cm', 'value': '10-15'},
                 {'label': '15-20 cm', 'value': '15-20'},
-                {'label': '20-25 cm', 'value': '20-25'}]
+                {'label': '20-25 cm', 'value': '20-25'},
+                {'label': '>25 cm', 'value': '>25'}]
     elif columna == 'wind_speed':
         return [{'label': '0-5 km/h', 'value': '0-5'}, 
                 {'label': '5-10 km/h', 'value': '5-10'},
@@ -408,8 +434,11 @@ def actualizar_graficos(tile, sens, size, placement, weed_type, weed_name, crop,
         # Convertir rangos de tamaño a valores numéricos para filtrar
         bins = []
         for rango in size:
-            min_val, max_val = map(float, rango.split('-'))
-            bins.append((min_val, max_val))
+            if rango == '>25':
+                bins.append((25, float('inf')))
+            else:
+                min_val, max_val = map(float, rango.split('-'))
+                bins.append((min_val, max_val))
         
         def in_selected_ranges(x):
             if pd.isna(x):

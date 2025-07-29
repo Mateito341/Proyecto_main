@@ -174,12 +174,12 @@ def crear_grafico(tipo_grafico, df, variable_analisis='weed_applied'):
     fig.add_trace(go.Bar(
         x=plot_data['rango'],
         y=plot_data['valor'],
-        name=variable_analisis.replace('_', ' '),
         marker_color=colors,
         text=[f"{v:.1f}%" if variable_analisis == 'weed_applied' else f"{v:.1f}" for v in plot_data['valor']],
         textposition='auto',
         width=0.5,
         hoverinfo='x+y',
+        showlegend=False
     ))
 
     datos_con_valores = plot_data[plot_data['valor'] > 0]
@@ -188,9 +188,9 @@ def crear_grafico(tipo_grafico, df, variable_analisis='weed_applied'):
             x=datos_con_valores['rango'],
             y=datos_con_valores['valor'],
             mode='lines+markers',
-            name='Tendencia',
             line=dict(color='#EF8A17', width=3),
-            marker=dict(size=8)
+            marker=dict(size=8),
+            showlegend=False
         ))
 
     # Anotaciones con índice numérico para evitar desplazamiento
@@ -267,17 +267,196 @@ def crear_grafico(tipo_grafico, df, variable_analisis='weed_applied'):
 
     return fig
 
+# Crear opciones para los filtros
+def crear_opciones_filtro(columna):
+    valores_unicos = df_aplico[columna].dropna().unique()
+    if columna in ['sensitivity', 'tile']:
+        valores_unicos = sorted([int(x) for x in valores_unicos if str(x).isdigit()])
+        return [{'label': str(v), 'value': v} for v in valores_unicos]
+    elif columna == 'size':
+        return [{'label': '0-5 cm', 'value': '0-5'}, 
+                {'label': '5-10 cm', 'value': '5-10'},
+                {'label': '10-15 cm', 'value': '10-15'},
+                {'label': '15-20 cm', 'value': '15-20'},
+                {'label': '20-25 cm', 'value': '20-25'}]
+    elif columna == 'wind_speed':
+        return [{'label': '0-5 km/h', 'value': '0-5'}, 
+                {'label': '5-10 km/h', 'value': '5-10'},
+                {'label': '10-15 km/h', 'value': '10-15'},
+                {'label': '15-20 km/h', 'value': '15-20'},
+                {'label': '20-25 km/h', 'value': '20-25'}]
+    else:
+        return [{'label': str(v), 'value': v} for v in sorted(valores_unicos)]
 
-# Crear todos los gráficos
-fig_velocidad = crear_grafico('speed', df_aplico.copy())
-fig_sensibilidad = crear_grafico('sensitivity', df_aplico.copy())
-fig_tamano = crear_grafico('size', df_aplico.copy())
-fig_ubicacion = crear_grafico('weed_placement', df_aplico.copy())
-fig_baldosa = crear_grafico('tile', df_aplico.copy())
-fig_velocidad_viento = crear_grafico('wind_speed', df_aplico.copy())
-fig_tipo = crear_grafico('weed_type', df_aplico.copy())
-fig_nombre = crear_grafico('weed_name', df_aplico.copy())
-fig_especie = crear_grafico('crop_specie', df_aplico.copy())
+# Layout de los filtros
+filtros = html.Div([
+    html.H3("Filtros"),
+    html.Div([
+        html.Div([
+            html.Label("Baldosa (Tile)"),
+            dcc.Dropdown(
+                id='filtro-tile',
+                options=crear_opciones_filtro('tile'),
+                multi=True,
+                placeholder="Seleccione baldosa(s)"
+            )
+        ], style={'width': '24%', 'display': 'inline-block', 'margin': '5px'}),
+        
+        html.Div([
+            html.Label("Sensibilidad"),
+            dcc.Dropdown(
+                id='filtro-sens',
+                options=crear_opciones_filtro('sensitivity'),
+                multi=True,
+                placeholder="Seleccione sensibilidad(es)"
+            )
+        ], style={'width': '24%', 'display': 'inline-block', 'margin': '5px'}),
+        
+        html.Div([
+            html.Label("Tamaño maleza"),
+            dcc.Dropdown(
+                id='filtro-size',
+                options=crear_opciones_filtro('size'),
+                multi=True,
+                placeholder="Seleccione tamaño(s)"
+            )
+        ], style={'width': '24%', 'display': 'inline-block', 'margin': '5px'}),
+        
+        html.Div([
+            html.Label("Ubicación maleza"),
+            dcc.Dropdown(
+                id='filtro-placement',
+                options=crear_opciones_filtro('weed_placement'),
+                multi=True,
+                placeholder="Seleccione ubicación(es)"
+            )
+        ], style={'width': '24%', 'display': 'inline-block', 'margin': '5px'})
+    ]),
+    
+    html.Div([
+        html.Div([
+            html.Label("Tipo de maleza"),
+            dcc.Dropdown(
+                id='filtro-type',
+                options=crear_opciones_filtro('weed_type'),
+                multi=True,
+                placeholder="Seleccione tipo(s)"
+            )
+        ], style={'width': '24%', 'display': 'inline-block', 'margin': '5px'}),
+        
+        html.Div([
+            html.Label("Nombre maleza"),
+            dcc.Dropdown(
+                id='filtro-name',
+                options=crear_opciones_filtro('weed_name'),
+                multi=True,
+                placeholder="Seleccione nombre(s)"
+            )
+        ], style={'width': '24%', 'display': 'inline-block', 'margin': '5px'}),
+        
+        html.Div([
+            html.Label("Especie cultivo"),
+            dcc.Dropdown(
+                id='filtro-crop',
+                options=crear_opciones_filtro('crop_specie'),
+                multi=True,
+                placeholder="Seleccione especie(s)"
+            )
+        ], style={'width': '24%', 'display': 'inline-block', 'margin': '5px'}),
+        
+        html.Div([
+            html.Label("Velocidad viento"),
+            dcc.Dropdown(
+                id='filtro-wind',
+                options=crear_opciones_filtro('wind_speed'),
+                multi=True,
+                placeholder="Seleccione velocidad(es)"
+            )
+        ], style={'width': '24%', 'display': 'inline-block', 'margin': '5px'})
+    ])
+], style={'border': '1px solid #ddd', 'padding': '10px', 'margin-bottom': '20px', 'border-radius': '5px'})
+
+# Callback para aplicar filtros
+@app.callback(
+    [Output('grafico-velocidad', 'figure'),
+     Output('grafico-sensibilidad', 'figure'),
+     Output('grafico-tamano', 'figure'),
+     Output('grafico-ubicacion', 'figure'),
+     Output('grafico-baldosa', 'figure'),
+     Output('grafico-velocidad-viento', 'figure'),
+     Output('grafico-tipo', 'figure'),
+     Output('grafico-nombre', 'figure'),
+     Output('grafico-especie', 'figure')],
+    [Input('filtro-tile', 'value'),
+     Input('filtro-sens', 'value'),
+     Input('filtro-size', 'value'),
+     Input('filtro-placement', 'value'),
+     Input('filtro-type', 'value'),
+     Input('filtro-name', 'value'),
+     Input('filtro-crop', 'value'),
+     Input('filtro-wind', 'value')]
+)
+def actualizar_graficos(tile, sens, size, placement, weed_type, weed_name, crop, wind):
+    df_filtrado = df_aplico.copy()
+    
+    # Aplicar filtros
+    if tile:
+        df_filtrado = df_filtrado[df_filtrado['tile'].isin(tile)]
+    if sens:
+        df_filtrado = df_filtrado[df_filtrado['sensitivity'].isin(sens)]
+    if size:
+        # Convertir rangos de tamaño a valores numéricos para filtrar
+        bins = []
+        for rango in size:
+            min_val, max_val = map(float, rango.split('-'))
+            bins.append((min_val, max_val))
+        
+        def in_selected_ranges(x):
+            if pd.isna(x):
+                return False
+            for min_val, max_val in bins:
+                if min_val <= x < max_val:
+                    return True
+            return False
+        
+        df_filtrado = df_filtrado[df_filtrado['size'].apply(in_selected_ranges)]
+    if placement:
+        df_filtrado = df_filtrado[df_filtrado['weed_placement'].isin(placement)]
+    if weed_type:
+        df_filtrado = df_filtrado[df_filtrado['weed_type'].isin(weed_type)]
+    if weed_name:
+        df_filtrado = df_filtrado[df_filtrado['weed_name'].isin(weed_name)]
+    if crop:
+        df_filtrado = df_filtrado[df_filtrado['crop_specie'].isin(crop)]
+    if wind:
+        # Convertir rangos de velocidad del viento a valores numéricos para filtrar
+        bins = []
+        for rango in wind:
+            min_val, max_val = map(float, rango.split('-'))
+            bins.append((min_val, max_val))
+        
+        def in_selected_ranges_wind(x):
+            if pd.isna(x):
+                return False
+            for min_val, max_val in bins:
+                if min_val <= x < max_val:
+                    return True
+            return False
+        
+        df_filtrado = df_filtrado[df_filtrado['wind_speed'].apply(in_selected_ranges_wind)]
+    
+    # Crear gráficos con datos filtrados
+    fig_velocidad = crear_grafico('speed', df_filtrado.copy())
+    fig_sensibilidad = crear_grafico('sensitivity', df_filtrado.copy())
+    fig_tamano = crear_grafico('size', df_filtrado.copy())
+    fig_ubicacion = crear_grafico('weed_placement', df_filtrado.copy())
+    fig_baldosa = crear_grafico('tile', df_filtrado.copy())
+    fig_velocidad_viento = crear_grafico('wind_speed', df_filtrado.copy())
+    fig_tipo = crear_grafico('weed_type', df_filtrado.copy())
+    fig_nombre = crear_grafico('weed_name', df_filtrado.copy())
+    fig_especie = crear_grafico('crop_specie', df_filtrado.copy())
+    
+    return fig_velocidad, fig_sensibilidad, fig_tamano, fig_ubicacion, fig_baldosa, fig_velocidad_viento, fig_tipo, fig_nombre, fig_especie
 
 # Definir layout
 app.layout = html.Div([
@@ -297,66 +476,61 @@ app.layout = html.Div([
         page_size=6
     ),
 
-    # Gráficos de aplicación uno al lado del otro
+    # Gráficos de aplicación con filtros
     html.H1("Análisis de Aplicación"),
     html.Hr(),
+    filtros,  # Sección de filtros agregada aquí
+    
     html.Div([
         html.Div([
             dcc.Graph(
-                id='grafico-velocidad',
-                figure=fig_velocidad
+                id='grafico-velocidad'
             )
         ], style={'width': '49%', 'display': 'inline-block'}),
         
         html.Div([
             dcc.Graph(
-                id='grafico-sensibilidad',
-                figure=fig_sensibilidad
+                id='grafico-sensibilidad'
             )
         ], style={'width': '49%', 'display': 'inline-block', 'float': 'right'})
     ]),
 
-    # Segunda fila de gráficos (nuevos)
     html.Div([
         html.Div([
-            dcc.Graph(id='grafico-tamano', figure=fig_tamano)
+            dcc.Graph(id='grafico-tamano')
         ], style={'width': '49%', 'display': 'inline-block'}),
         
         html.Div([
-            dcc.Graph(id='grafico-ubicacion', figure=fig_ubicacion)
+            dcc.Graph(id='grafico-ubicacion')
         ], style={'width': '49%', 'display': 'inline-block', 'float': 'right'})
     ]),
 
-    # Tercer fila de gráficos (nuevos)
     html.Div([
         html.Div([
-            dcc.Graph(id='grafico-baldosa', figure=fig_baldosa)
+            dcc.Graph(id='grafico-baldosa')
         ], style={'width': '49%', 'display': 'inline-block'}),
         
         html.Div([
-            dcc.Graph(id='grafico-velocidad-viento', figure=fig_velocidad_viento)
+            dcc.Graph(id='grafico-velocidad-viento')
         ], style={'width': '49%', 'display': 'inline-block', 'float': 'right'})
     ]),
 
-    # Cuarta fila de gráficos (tipo de maleza)
     html.Div([
         html.Div([
-            dcc.Graph(id='grafico-tipo', figure=fig_tipo)
+            dcc.Graph(id='grafico-tipo')
         ], style={'width': '49%', 'display': 'inline-block'}),
 
         html.Div([
-            dcc.Graph(id='grafico-especie', figure=fig_especie)
+            dcc.Graph(id='grafico-especie')
         ], style={'width': '49%', 'display': 'inline-block'})
     ]),
 
-    # quinta fila de gráficos (tipo de maleza)
     html.Div([
         html.Div([
-            dcc.Graph(id='grafico-nombre', figure=fig_nombre)
+            dcc.Graph(id='grafico-nombre')
         ], style={'width': '49%', 'display': 'inline-block'})
     ])
 ])
-
 
 # Ejecutar
 if __name__ == '__main__':
