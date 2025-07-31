@@ -47,13 +47,15 @@ def obtener_datos_aplico():
     df = pd.read_sql_query(query, conn)
     conn.close()
     # Convertir sensibilidad a entero y filtrar solo valores 1, 2, 3
-    if 'sensitivity' in df.columns:
-        df['sensitivity'] = pd.to_numeric(df['sensitivity'], errors='coerce')
-        df = df[df['sensitivity'].isin([1, 2, 3]) | df['sensitivity'].isna()]
+    df = df.copy()
+
+    # Usar .loc para las asignaciones
+    df.loc[:, 'sensitivity'] = pd.to_numeric(df['sensitivity'], errors='coerce')
+    df = df.loc[df['sensitivity'].isin([1, 2, 3]) | df['sensitivity'].isna()]
 
     if 'tile' in df.columns:
-        df['tile'] = pd.to_numeric(df['tile'], errors='coerce')
-        df = df[df['tile'].isin([1, 2, 3]) | df['tile'].isna()]
+        df.loc[:, 'tile'] = pd.to_numeric(df['tile'], errors='coerce')
+        df = df.loc[df['tile'].isin([1, 2, 3]) | df['tile'].isna()]
     return df
 
 # Obtener datos
@@ -78,8 +80,9 @@ app = Dash(__name__)
 # Función para crear gráficos
 def crear_grafico(tipo_grafico, df, variable_analisis='weed_applied'):
     if tipo_grafico == 'speed':
-        df['rango'] = pd.cut(df['speed'], bins=[0, 5, 10, 15, 20, 25], 
-                           labels=["0-5", "5-10", "10-15", "15-20", "20-25"], right=False)
+        df = df.copy()  # Crear copia explícita
+        df.loc[:, 'rango'] = pd.cut(df['speed'], bins=[0, 5, 10, 15, 20, 25], 
+                                labels=["0-5", "5-10", "10-15", "15-20", "20-25"], right=False)
         titulo = f"Por velocidad de avance (km/h)"
         etiqueta_x = "Rango de velocidad de"
     elif tipo_grafico == 'sensitivity':
@@ -88,7 +91,8 @@ def crear_grafico(tipo_grafico, df, variable_analisis='weed_applied'):
         titulo = f"Por sensibilidad (1-3)"
         etiqueta_x = "Nivel de sensibilidad"
     elif tipo_grafico == 'size':
-        df['size'] = pd.to_numeric(df['size'], errors='coerce')
+        df = df.copy()
+        df.loc[:, 'size'] = pd.to_numeric(df['size'], errors='coerce')
         df = df.dropna(subset=['size'])
 
         # Agregar bin extra para >25
@@ -102,35 +106,37 @@ def crear_grafico(tipo_grafico, df, variable_analisis='weed_applied'):
 
         # Asegurar orden correcto en el gráfico
         orden_size = ["0-5", "5-10", "10-15", "15-20", "20-25", ">25"]
-        df['rango'] = pd.Categorical(df['rango'], categories=orden_size, ordered=True)
+        df = df.copy()
+        df.loc[:, 'rango'] = pd.Categorical(df['rango'], categories=orden_size, ordered=True)
     elif tipo_grafico == 'weed_placement':
-        df = df.dropna(subset=['weed_placement'])
-        df['rango'] = df['weed_placement'].astype(str)
+        df = df.dropna(subset=['weed_placement']).copy() 
+        df.loc[:, 'rango'] = df['weed_placement'].astype(str) 
         titulo = f"Por ubicación de maleza"
         etiqueta_x = "Ubicación"
     elif tipo_grafico == 'tile':
-        df = df.dropna(subset=['tile'])
-        df['rango'] = df['tile'].astype(int).astype(str)
+        df = df.dropna(subset=['tile']).copy()
+        df.loc[:, 'rango'] = df['tile'].astype(int).astype(str)
         titulo = f"Por baldosa (1-3)"
         etiqueta_x = "Nivel de baldosa"
     elif tipo_grafico == 'wind_speed':
-        df['rango'] = pd.cut(df['wind_speed'], bins=[0, 5, 10, 15, 20, 25], 
-                           labels=["0-5", "5-10", "10-15", "15-20", "20-25"], right=False)
+        df = df.copy()
+        df.loc[:, 'rango'] = pd.cut(df['wind_speed'], bins=[0, 5, 10, 15, 20, 25], 
+                                  labels=["0-5", "5-10", "10-15", "15-20", "20-25"], right=False) 
         titulo = f"Por velocidad del viento (km/h)"
         etiqueta_x = "Rango de velocidad"
     elif tipo_grafico == 'weed_type':
-        df = df.dropna(subset=['weed_type'])
-        df['rango'] = df['weed_type'].astype(str)
+        df = df.dropna(subset=['weed_type']).copy()  
+        df.loc[:, 'rango'] = df['weed_type'].astype(str)
         titulo = f"Por tipo de maleza"
-        etiqueta_x = "Tipo de maleza"
+        etiqueta_x = "Tipo"
     elif tipo_grafico == 'weed_name':
-        df = df.dropna(subset=['weed_name'])
-        df['rango'] = df['weed_name'].astype(str)
+        df = df.dropna(subset=['weed_name']).copy()
+        df.loc[:, 'rango'] = df['weed_name'].astype(str)
         titulo = f"Por nombre de maleza"
         etiqueta_x = "Nombre de maleza"
     elif tipo_grafico == 'crop_specie':
-        df = df.dropna(subset=['crop_specie'])
-        df['rango'] = df['crop_specie'].astype(str)
+        df = df.dropna(subset=['crop_specie']).copy()
+        df.loc[:, 'rango'] = df['crop_specie'].astype(str)
         titulo = f"Por especie de cultivo"
         etiqueta_x = "Especie de cultivo"
 
@@ -455,7 +461,7 @@ def actualizar_graficos(tile, sens, size, placement, weed_type, weed_name, crop,
     
     # Aplicar filtros
     if tile:
-        df_filtrado = df_filtrado[df_filtrado['tile'].isin(tile)]
+        df_filtrado = df_filtrado.loc[df_filtrado['tile'].isin(tile)]
     if sens:
         df_filtrado = df_filtrado[df_filtrado['sensitivity'].isin(sens)]
     if size:
@@ -609,4 +615,4 @@ app.layout = html.Div([
 
 # Ejecutar
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, port=8051) 
