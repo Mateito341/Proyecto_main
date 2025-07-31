@@ -47,13 +47,15 @@ def obtener_datos_aplico():
     df = pd.read_sql_query(query, conn)
     conn.close()
     # Convertir sensibilidad a entero y filtrar solo valores 1, 2, 3
-    if 'sensitivity' in df.columns:
-        df['sensitivity'] = pd.to_numeric(df['sensitivity'], errors='coerce')
-        df = df[df['sensitivity'].isin([1, 2, 3]) | df['sensitivity'].isna()]
+    df = df.copy()
+
+    # Usar .loc para las asignaciones
+    df.loc[:, 'sensitivity'] = pd.to_numeric(df['sensitivity'], errors='coerce')
+    df = df.loc[df['sensitivity'].isin([1, 2, 3]) | df['sensitivity'].isna()]
 
     if 'tile' in df.columns:
-        df['tile'] = pd.to_numeric(df['tile'], errors='coerce')
-        df = df[df['tile'].isin([1, 2, 3]) | df['tile'].isna()]
+        df.loc[:, 'tile'] = pd.to_numeric(df['tile'], errors='coerce')
+        df = df.loc[df['tile'].isin([1, 2, 3]) | df['tile'].isna()]
     return df
 
 # Obtener datos
@@ -78,8 +80,9 @@ app = Dash(__name__)
 # Función para crear gráficos
 def crear_grafico(tipo_grafico, df, variable_analisis='weed_applied'):
     if tipo_grafico == 'speed':
-        df['rango'] = pd.cut(df['speed'], bins=[0, 5, 10, 15, 20, 25], 
-                           labels=["0-5", "5-10", "10-15", "15-20", "20-25"])
+        df = df.copy()  # Crear copia explícita
+        df.loc[:, 'rango'] = pd.cut(df['speed'], bins=[0, 5, 10, 15, 20, 25], 
+                                labels=["0-5", "5-10", "10-15", "15-20", "20-25"], right=False)
         titulo = f"Por velocidad de avance (km/h)"
         etiqueta_x = "Rango de velocidad de"
     elif tipo_grafico == 'sensitivity':
@@ -88,40 +91,52 @@ def crear_grafico(tipo_grafico, df, variable_analisis='weed_applied'):
         titulo = f"Por sensibilidad (1-3)"
         etiqueta_x = "Nivel de sensibilidad"
     elif tipo_grafico == 'size':
-        df['size'] = pd.to_numeric(df['size'], errors='coerce')
+        df = df.copy()
+        df.loc[:, 'size'] = pd.to_numeric(df['size'], errors='coerce')
         df = df.dropna(subset=['size'])
-        df['rango'] = pd.cut(df['size'], bins=[0, 5, 10, 15, 20, 25], 
-                            labels=["0-5", "5-10", "10-15", "15-20", "20-25"])
+
+        # Agregar bin extra para >25
+        bins = [0, 5, 10, 15, 20, 25, float('inf')]
+        labels = ["0-5", "5-10", "10-15", "15-20", "20-25", ">25"]
+
+        df['rango'] = pd.cut(df['size'], bins=bins, labels=labels, right=False)
+
         titulo = f"Por tamaño de maleza (cm)"
         etiqueta_x = "Tamaño"
+
+        # Asegurar orden correcto en el gráfico
+        orden_size = ["0-5", "5-10", "10-15", "15-20", "20-25", ">25"]
+        df = df.copy()
+        df.loc[:, 'rango'] = pd.Categorical(df['rango'], categories=orden_size, ordered=True)
     elif tipo_grafico == 'weed_placement':
-        df = df.dropna(subset=['weed_placement'])
-        df['rango'] = df['weed_placement'].astype(str)
+        df = df.dropna(subset=['weed_placement']).copy() 
+        df.loc[:, 'rango'] = df['weed_placement'].astype(str) 
         titulo = f"Por ubicación de maleza"
         etiqueta_x = "Ubicación"
     elif tipo_grafico == 'tile':
-        df = df.dropna(subset=['tile'])
-        df['rango'] = df['tile'].astype(int).astype(str)
+        df = df.dropna(subset=['tile']).copy()
+        df.loc[:, 'rango'] = df['tile'].astype(int).astype(str)
         titulo = f"Por baldosa (1-3)"
         etiqueta_x = "Nivel de baldosa"
     elif tipo_grafico == 'wind_speed':
-        df['rango'] = pd.cut(df['wind_speed'], bins=[0, 5, 10, 15, 20, 25], 
-                           labels=["0-5", "5-10", "10-15", "15-20", "20-25"])
+        df = df.copy()
+        df.loc[:, 'rango'] = pd.cut(df['wind_speed'], bins=[0, 5, 10, 15, 20, 25], 
+                                  labels=["0-5", "5-10", "10-15", "15-20", "20-25"], right=False) 
         titulo = f"Por velocidad del viento (km/h)"
         etiqueta_x = "Rango de velocidad"
     elif tipo_grafico == 'weed_type':
-        df = df.dropna(subset=['weed_type'])
-        df['rango'] = df['weed_type'].astype(str)
+        df = df.dropna(subset=['weed_type']).copy()  
+        df.loc[:, 'rango'] = df['weed_type'].astype(str)
         titulo = f"Por tipo de maleza"
         etiqueta_x = "Tipo"
     elif tipo_grafico == 'weed_name':
-        df = df.dropna(subset=['weed_name'])
-        df['rango'] = df['weed_name'].astype(str)
+        df = df.dropna(subset=['weed_name']).copy()
+        df.loc[:, 'rango'] = df['weed_name'].astype(str)
         titulo = f"Por nombre de maleza"
         etiqueta_x = "Nombre de maleza"
     elif tipo_grafico == 'crop_specie':
-        df = df.dropna(subset=['crop_specie'])
-        df['rango'] = df['crop_specie'].astype(str)
+        df = df.dropna(subset=['crop_specie']).copy()
+        df.loc[:, 'rango'] = df['crop_specie'].astype(str)
         titulo = f"Por especie de cultivo"
         etiqueta_x = "Especie de cultivo"
 
@@ -161,6 +176,22 @@ def crear_grafico(tipo_grafico, df, variable_analisis='weed_applied'):
         'valor': metricas.values,
         'count': counts.values
     })
+
+    # Ordenar rangos
+    if tipo_grafico == 'size':
+        orden_size = ["0-5", "5-10", "10-15", "15-20", "20-25", ">25"]
+        plot_data['rango'] = pd.Categorical(plot_data['rango'], categories=orden_size, ordered=True)
+        plot_data = plot_data.sort_values('rango')
+
+    if tipo_grafico == 'speed':
+        orden_speed = ["0-5", "5-10", "10-15", "15-20", "20-25"]
+        plot_data['rango'] = pd.Categorical(plot_data['rango'], categories=orden_speed, ordered=True)
+        plot_data = plot_data.sort_values('rango')
+
+    if tipo_grafico == 'wind_speed':
+        orden_wind = ["0-5", "5-10", "10-15", "15-20", "20-25"]
+        plot_data['rango'] = pd.Categorical(plot_data['rango'], categories=orden_wind, ordered=True)
+        plot_data = plot_data.sort_values('rango')
     
     # Ordenar si corresponde
     if tipo_grafico in ['speed', 'wind_speed', 'size']:
@@ -198,7 +229,7 @@ def crear_grafico(tipo_grafico, df, variable_analisis='weed_applied'):
         fig.add_annotation(
             x=i,
             y=-2,
-            text=f"{int(row.count)} ensayos",
+            text=f"{int(row.count)} malezas",
             showarrow=False,
             font=dict(size=10, color="black"),
             xanchor='center',
@@ -270,16 +301,28 @@ def crear_grafico(tipo_grafico, df, variable_analisis='weed_applied'):
 # Crear opciones para los filtros
 def crear_opciones_filtro(columna):
     valores_unicos = df_aplico[columna].dropna().unique()
-    if columna in ['sensitivity', 'tile']:
-        valores_unicos = sorted([int(x) for x in valores_unicos if str(x).isdigit()])
-        return [{'label': str(v), 'value': v} for v in valores_unicos]
+    if columna == 'sensitivity':
+        return [{'label': '1', 'value': 1}, 
+                {'label': '2', 'value': 2},
+                {'label': '3', 'value': 3}]
+    elif columna == 'tile':
+        return [{'label': '1', 'value': 1}, 
+                {'label': '2', 'value': 2},
+                {'label': '3', 'value': 3}]
     elif columna == 'size':
         return [{'label': '0-5 cm', 'value': '0-5'}, 
                 {'label': '5-10 cm', 'value': '5-10'},
                 {'label': '10-15 cm', 'value': '10-15'},
                 {'label': '15-20 cm', 'value': '15-20'},
-                {'label': '20-25 cm', 'value': '20-25'}]
+                {'label': '20-25 cm', 'value': '20-25'},
+                {'label': '>25 cm', 'value': '>25'}]
     elif columna == 'wind_speed':
+        return [{'label': '0-5 km/h', 'value': '0-5'}, 
+                {'label': '5-10 km/h', 'value': '5-10'},
+                {'label': '10-15 km/h', 'value': '10-15'},
+                {'label': '15-20 km/h', 'value': '15-20'},
+                {'label': '20-25 km/h', 'value': '20-25'}]
+    elif columna == 'speed':
         return [{'label': '0-5 km/h', 'value': '0-5'}, 
                 {'label': '5-10 km/h', 'value': '5-10'},
                 {'label': '10-15 km/h', 'value': '10-15'},
@@ -291,9 +334,11 @@ def crear_opciones_filtro(columna):
 # Layout de los filtros
 filtros = html.Div([
     html.H3("Filtros"),
+    
+    # Fila 1
     html.Div([
         html.Div([
-            html.Label("Baldosa (Tile)"),
+            html.Label("Baldosa"),
             dcc.Dropdown(
                 id='filtro-tile',
                 options=crear_opciones_filtro('tile'),
@@ -301,7 +346,7 @@ filtros = html.Div([
                 placeholder="Seleccione baldosa(s)"
             )
         ], style={'width': '24%', 'display': 'inline-block', 'margin': '5px'}),
-        
+
         html.Div([
             html.Label("Sensibilidad"),
             dcc.Dropdown(
@@ -311,7 +356,7 @@ filtros = html.Div([
                 placeholder="Seleccione sensibilidad(es)"
             )
         ], style={'width': '24%', 'display': 'inline-block', 'margin': '5px'}),
-        
+
         html.Div([
             html.Label("Tamaño maleza"),
             dcc.Dropdown(
@@ -321,7 +366,7 @@ filtros = html.Div([
                 placeholder="Seleccione tamaño(s)"
             )
         ], style={'width': '24%', 'display': 'inline-block', 'margin': '5px'}),
-        
+
         html.Div([
             html.Label("Ubicación maleza"),
             dcc.Dropdown(
@@ -330,9 +375,10 @@ filtros = html.Div([
                 multi=True,
                 placeholder="Seleccione ubicación(es)"
             )
-        ], style={'width': '24%', 'display': 'inline-block', 'margin': '5px'})
+        ], style={'width': '24%', 'display': 'inline-block', 'margin': '5px'}),
     ]),
     
+    # Fila 2
     html.Div([
         html.Div([
             html.Label("Tipo de maleza"),
@@ -343,7 +389,7 @@ filtros = html.Div([
                 placeholder="Seleccione tipo(s)"
             )
         ], style={'width': '24%', 'display': 'inline-block', 'margin': '5px'}),
-        
+
         html.Div([
             html.Label("Nombre maleza"),
             dcc.Dropdown(
@@ -353,7 +399,7 @@ filtros = html.Div([
                 placeholder="Seleccione nombre(s)"
             )
         ], style={'width': '24%', 'display': 'inline-block', 'margin': '5px'}),
-        
+
         html.Div([
             html.Label("Especie cultivo"),
             dcc.Dropdown(
@@ -363,7 +409,20 @@ filtros = html.Div([
                 placeholder="Seleccione especie(s)"
             )
         ], style={'width': '24%', 'display': 'inline-block', 'margin': '5px'}),
-        
+
+        html.Div([
+            html.Label("Velocidad de avance"),
+            dcc.Dropdown(
+                id='filtro-speed',
+                options=crear_opciones_filtro('speed'),
+                multi=True,
+                placeholder="Seleccione velocidad(es)"
+            )
+        ], style={'width': '24%', 'display': 'inline-block', 'margin': '5px'}),
+    ]),
+
+    # Fila 3
+    html.Div([
         html.Div([
             html.Label("Velocidad viento"),
             dcc.Dropdown(
@@ -372,7 +431,7 @@ filtros = html.Div([
                 multi=True,
                 placeholder="Seleccione velocidad(es)"
             )
-        ], style={'width': '24%', 'display': 'inline-block', 'margin': '5px'})
+        ], style={'width': '24%', 'display': 'inline-block', 'margin': '5px'}),
     ])
 ], style={'border': '1px solid #ddd', 'padding': '10px', 'margin-bottom': '20px', 'border-radius': '5px'})
 
@@ -394,22 +453,26 @@ filtros = html.Div([
      Input('filtro-type', 'value'),
      Input('filtro-name', 'value'),
      Input('filtro-crop', 'value'),
-     Input('filtro-wind', 'value')]
+     Input('filtro-wind', 'value'),
+     Input('filtro-speed', 'value')],
 )
-def actualizar_graficos(tile, sens, size, placement, weed_type, weed_name, crop, wind):
+def actualizar_graficos(tile, sens, size, placement, weed_type, weed_name, crop, wind, speed):
     df_filtrado = df_aplico.copy()
     
     # Aplicar filtros
     if tile:
-        df_filtrado = df_filtrado[df_filtrado['tile'].isin(tile)]
+        df_filtrado = df_filtrado.loc[df_filtrado['tile'].isin(tile)]
     if sens:
         df_filtrado = df_filtrado[df_filtrado['sensitivity'].isin(sens)]
     if size:
         # Convertir rangos de tamaño a valores numéricos para filtrar
         bins = []
         for rango in size:
-            min_val, max_val = map(float, rango.split('-'))
-            bins.append((min_val, max_val))
+            if rango == '>25':
+                bins.append((25, float('inf')))
+            else:
+                min_val, max_val = map(float, rango.split('-'))
+                bins.append((min_val, max_val))
         
         def in_selected_ranges(x):
             if pd.isna(x):
@@ -428,22 +491,40 @@ def actualizar_graficos(tile, sens, size, placement, weed_type, weed_name, crop,
         df_filtrado = df_filtrado[df_filtrado['weed_name'].isin(weed_name)]
     if crop:
         df_filtrado = df_filtrado[df_filtrado['crop_specie'].isin(crop)]
+
+    # Filtro por viento
     if wind:
-        # Convertir rangos de velocidad del viento a valores numéricos para filtrar
-        bins = []
+        wind_bins = []
         for rango in wind:
             min_val, max_val = map(float, rango.split('-'))
-            bins.append((min_val, max_val))
+            wind_bins.append((min_val, max_val))
         
         def in_selected_ranges_wind(x):
             if pd.isna(x):
                 return False
-            for min_val, max_val in bins:
+            for min_val, max_val in wind_bins:
                 if min_val <= x < max_val:
                     return True
             return False
-        
+
         df_filtrado = df_filtrado[df_filtrado['wind_speed'].apply(in_selected_ranges_wind)]
+
+    # Filtro por velocidad de avance
+    if speed:
+        speed_bins = []
+        for rango in speed:
+            min_val, max_val = map(float, rango.split('-'))
+            speed_bins.append((min_val, max_val))
+        
+        def in_selected_ranges_speed(x):
+            if pd.isna(x):
+                return False
+            for min_val, max_val in speed_bins:
+                if min_val <= x < max_val:
+                    return True
+            return False
+
+        df_filtrado = df_filtrado[df_filtrado['speed'].apply(in_selected_ranges_speed)]
     
     # Crear gráficos con datos filtrados
     fig_velocidad = crear_grafico('speed', df_filtrado.copy())
@@ -534,4 +615,4 @@ app.layout = html.Div([
 
 # Ejecutar
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, port=8051) 
