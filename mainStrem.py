@@ -3,6 +3,7 @@ import pandas as pd
 import datetime
 import sqlite3
 from sqlite3 import Error
+from verficar import verificar_columnas, estandarizar_applied, traducir_surco
 
 USERS = {
     "desarrollador": {

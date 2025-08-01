@@ -3,6 +3,39 @@ import pandas as pd
 import datetime
 import sqlite3
 from sqlite3 import Error
+from verificarStem import verificar_columnas, archivos_estandarizados
+
+USERS = {
+    "desarrollador": {
+        "password": "456",  # En producción usa hashes y almacenamiento seguro
+        "role": "desarrollador"
+    },
+    "cliente": {
+        "password": "123",
+        "role": "cliente"
+    }
+}
+
+def login_section():
+    """Muestra el formulario de login y maneja la autenticación"""
+    st.title("🔑 Inicio de Sesión")
+    
+    username = st.text_input("Usuario")
+    password = st.text_input("Contraseña", type="password")
+    
+    if st.button("Ingresar"):
+        if username in USERS and USERS[username]["password"] == password:
+            st.session_state["logged_in"] = True
+            st.session_state["username"] = username
+            st.session_state["role"] = USERS[username]["role"]
+            st.rerun()
+        else:
+            st.error("Credenciales incorrectas")
+
+# Verificar si el usuario está logueado
+if "logged_in" not in st.session_state:
+    login_section()
+    st.stop()  # Detiene la ejecución del resto del código hasta que se loguee
 
 # Configuración de la base de datos SQLite
 def create_connection():
@@ -157,25 +190,55 @@ if conn is not None:
     create_tables(conn)
 
 st.set_page_config(page_title="Formulario de Ensayos", layout="wide")
-st.title("Formulario de Ensayos")
 
-tabs = st.tabs([
+# Crear un contenedor de columnas para el encabezado
+header = st.container()
+with header:
+    cols = st.columns([4, 1])  # 4 partes para el título, 1 para el botón
+    
+    with cols[0]:
+        st.title("Formulario de Ensayos")
+        st.write(f"Usuario: {st.session_state['username']} | Rol: {st.session_state['role']}")
+
+    
+    with cols[1]:
+        # Espaciador para bajar el botón
+        st.write("")  # Línea vacía
+        st.write("")  # Otra línea vacía
+        st.write("")  # Línea vacía
+        st.write("")  # Línea vacía
+        st.write("")  # Línea vacía
+        
+        # Botón de cerrar sesión con key único
+        if st.button("🔒 Cerrar sesión", key="unique_logout_button"):
+            st.session_state.clear()
+            st.rerun()
+
+# Lista de títulos de pestañas (strings)
+tab_titles = [
     "🧑‍🌾 Información del Ensayo",
     "🌍 Condiciones del Lote",
     "📋 Detalles de Aplicación",
     "🛠️ Evaluación",
-    "📤 Enviar",
-    "⚙️ Desarrollo"
-])
+    "📤 Enviar"
+]
+
+# Añadir pestaña de desarrollo solo si es developer
+if st.session_state.get("role") == "desarrollador":
+    tab_titles.append("⚙️ Desarrollo")
+
+# Crear las pestañas UNA SOLA VEZ
+tabs = st.tabs(tab_titles)
 
 # RECOLECTAMOS LOS DATOS FUERA DE CUALQUIER FORMULARIO
 with tabs[0]:
+
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("🧾 Cliente")
         name = st.text_input("Nombre del cliente *")
         sprai_id = st.text_input("ID del sistema pulverizador")
-        modules_id = st.text_input("ID de los módulos utilizados *")
+        modules_id = st.text_input("ID de los módulo/s utilizados (SMXX0000)*")
         st.subheader("👷 Personal")
         machine_operator = st.text_input("Operador de la máquina")
         trial_testers = st.text_input("Evaluadores del ensayo *")
@@ -191,8 +254,8 @@ with tabs[1]:
         farm = st.text_input("Nombre de la finca")
         farm_address = st.text_input("Dirección de la finca")
         field_location = st.text_input("Ubicación del lote (link Google Maps) *")
-        latitude = st.text_input("Latitud")
-        longitude = st.text_input("Longitud")
+        latitude = st.number_input("Latitud")
+        longitude = st.number_input("Longitud")
         soil_type = st.text_input("Tipo de suelo")
     with col2:
         st.subheader("🌦️ Condiciones Ambientales")
@@ -228,8 +291,8 @@ with tabs[2]:
         st.subheader("🧪 Colorante")
         dye_used = st.text_input("Tipo de colorante")
         dye_manufacturer = st.text_input("Fabricante", key="dye_manufacturer")
-        dye_concentration_ll = st.number_input("Concentración (l/l)")
-        dye_concentration_gl = st.number_input("Concentración (g/l)")
+        dye_concentration_ll = st.number_input("Concentración (Líquido: l/l)")
+        dye_concentration_gl = st.number_input("Concentración (Sólido: g/l)")
     with col3:
         st.subheader("💧 Herbicida")
         herbicide = st.text_input("Nombre del herbicida")
@@ -238,14 +301,41 @@ with tabs[2]:
 with tabs[3]:
     col1, col2 = st.columns(2)
     with col1:
-        st.subheader("🌾 Modelo de Detección")
-        sens = st.selectbox("Sensibilidad", [1, 2, 3])
-        tile = st.selectbox("Baldosa", [1, 2, 3])
-    with col2:
         st.subheader("📊 Resultados Malezas")
         st.write("Subí un archivo CSV con los datos de malezas")
         csv_file = st.file_uploader("Cargar archivo CSV", type=["csv"])
         uploader = st.text_input("Persona que cargó los datos")
+    with col2:
+        st.subheader("🌾 Modelo de Detección")
+        sens = st.selectbox("Sensibilidad", [1, 2, 3])
+        tile = st.selectbox("Baldosa", [1, 2, 3])
+
+    if csv_file:
+        try:
+            df_csv = pd.read_csv(csv_file)
+            dataframe_procesado, errores_tipo_dato = verificar_columnas(df_csv)
+        except Exception as e:
+            st.error(f"Error al leer el archivo CSV: {e}")
+            dataframe_procesado = None
+            errores_tipo_dato = {"lectura": [str(e)]}
+    else:
+        dataframe_procesado = None
+        errores_tipo_dato = {"archivo": ["No se cargó un archivo CSV."]}
+
+
+    if st.button("Confirmar CSV y Estandarizar"):
+        if dataframe_procesado is not None and not errores_tipo_dato:
+            df_estandarizado = archivos_estandarizados(dataframe_procesado)
+        elif dataframe_procesado is None:
+            st.error("🚫 No se cargó un archivo CSV válido.")
+        else:
+            st.error("🚫 El archivo tiene errores de tipo de dato. No se puede estandarizar.")
+            for columna, errores in errores_tipo_dato.items():
+                st.warning(f"❌ Errores en '{columna}':")
+                for err in errores:
+                    st.text(f"   - {err}")
+
+
 
 with tabs[4]:
     st.subheader("Resumen")
@@ -443,21 +533,20 @@ with tabs[4]:
                         )
                         
                         # Procesar archivo CSV si existe
-                        if csv_file:
-                            try:
-                                csv_data = pd.read_csv(csv_file)
-                                for _, row in csv_data.iterrows():
-                                    cursor.execute(
-                                        """INSERT INTO resultados_malezas (
-                                            ensayo_id, uploader, weed_diameter, size, height,
-                                            weed_placement, weed_type, weed_name, weed_applied
-                                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                                        (ensayo_id, uploader, row.get('weed_diameter'), row.get('size'),
-                                        row.get('height'), row.get('weed_placement'), 
-                                        row.get('weed_type'), row.get('weed_name'), row.get('weed_applied'))
-                                    )
-                            except Exception as e:
-                                st.warning(f"Advertencia: No se pudo procesar el archivo CSV. Error: {str(e)}")
+
+                        try:
+                            for _, row in df_estandarizado.iterrows():
+                                cursor.execute(
+                                    """INSERT INTO resultados_malezas (
+                                        ensayo_id, uploader, weed_diameter, size, height,
+                                        weed_placement, weed_type, weed_name, weed_applied
+                                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                    (ensayo_id, uploader, row.get('weed_diameter'), row.get('size'),
+                                    row.get('height'), row.get('weed_placement'), 
+                                    row.get('weed_type'), row.get('weed_name'), row.get('weed_applied'))
+                                )
+                        except Exception as e:
+                            st.warning(f"Advertencia: No se pudo procesar el archivo CSV. Error: {str(e)}")
                         
                         conn.commit()
                         st.success("✅ Formulario enviado correctamente a la base de datos")
@@ -470,36 +559,142 @@ with tabs[4]:
                     st.error("No se pudo conectar a la base de datos. No se guardó la información.")
 
 # Esto solo lo ve el desarrollador
-with tabs[5]:
-    st.header("📂 Ver datos almacenados")
+if st.session_state.get("role") == "desarrollador" and len(tabs) > 5:
+    with tabs[5]:
+        st.header("Administración de Datos")
+        
+        if conn:
+            # ==============================================
+            # SECCIÓN PARA BORRAR ENSAYO ESPECÍFICO (CORRECCIÓN)
+            # ==============================================
+            st.subheader("✏️ Corregir Datos de Ensayo")
 
-    if conn:
-        if st.button("🔄 Resetear todas las tablas"):
-            try:
-                cursor = conn.cursor()
-                tablas = [
-                    "clientes", "ensayos", "ubicacion", "condiciones_ambientales",
-                    "cultivo", "pulverizadora", "colorante", "personal",
-                    "herbicida", "modelo_deteccion", "resultados_malezas"
+            # Obtener lista completa de ensayos con información relevante
+            cursor = conn.cursor()
+            query = """
+            SELECT e.ensayo_id, e.test_date, c.name, e.test_time 
+            FROM ensayos e
+            JOIN clientes c ON e.cliente_id = c.cliente_id
+            ORDER BY e.test_date DESC, e.test_time DESC
+            """
+            cursor.execute(query)
+            ensayos = cursor.fetchall()
+            
+            if ensayos:
+                # Crear opciones descriptivas para el selectbox
+                opciones_ensayos = [
+                    f"ID: {e[0]} | Fecha: {e[1]} {e[3]} | Cliente: {e[2]}"
+                    for e in ensayos
                 ]
-                for tabla in tablas:
-                    cursor.execute(f"DELETE FROM {tabla}")
-                conn.commit()
-                st.success("✅ Todas las tablas fueron vaciadas correctamente.")
-            except Exception as e:
-                st.error(f"Error al resetear tablas: {str(e)}")
+                
+                ensayo_seleccionado = st.selectbox(
+                    "Seleccione el ensayo a corregir/eliminar:",
+                    opciones_ensayos,
+                    key="selector_ensayo_correccion"
+                )
+                
+                # Extraer el ID del ensayo seleccionado
+                ensayo_id = int(ensayo_seleccionado.split("ID: ")[1].split(" | ")[0]) if ensayo_seleccionado else None
+                
+                st.warning("ADVERTENCIA: Esta acción eliminará el ensayo de forma permanente.")
+                confirmacion = st.checkbox(
+                    f"Confirmar que desea eliminar el ensayo ID {ensayo_id}",
+                    key=f"confirm_delete_{ensayo_id}"
+                )
+                
+                if confirmacion and st.button("🗑️ ELIMINAR ENSAYO", key=f"delete_btn_{ensayo_id}"):
+                    try:
+                        # Lista de todas las tablas relacionadas con ensayos
+                        tablas_relacionadas = [
+                            "ubicacion", "condiciones_ambientales", "cultivo",
+                            "pulverizadora", "colorante", "personal",
+                            "herbicida", "modelo_deteccion", "resultados_malezas"
+                        ]
+                        
+                        # Obtener cliente_id asociado al ensayo para posible limpieza
+                        cursor.execute("SELECT cliente_id FROM ensayos WHERE ensayo_id = ?", (ensayo_id,))
+                        cliente_id = cursor.fetchone()[0]
+                        
+                        # 1. Borrar datos en tablas relacionadas
+                        for tabla in tablas_relacionadas:
+                            cursor.execute(f"DELETE FROM {tabla} WHERE ensayo_id = ?", (ensayo_id,))
+                        
+                        # 2. Borrar el registro principal del ensayo
+                        cursor.execute("DELETE FROM ensayos WHERE ensayo_id = ?", (ensayo_id,))
+                        
+                        # 3. Verificar si el cliente queda sin ensayos y opcionalmente borrarlo
+                        cursor.execute("SELECT COUNT(*) FROM ensayos WHERE cliente_id = ?", (cliente_id,))
+                        if cursor.fetchone()[0] == 0:
+                            cursor.execute("DELETE FROM clientes WHERE cliente_id = ?", (cliente_id,))
+                        
+                        conn.commit()
+                        st.success(f"✅ Ensayo ID {ensayo_id} y todos sus datos asociados fueron eliminados correctamente")
+                        st.balloons()
+                        st.rerun()  # Refrescar la vista
+                        
+                    except Exception as e:
+                        conn.rollback()
+                        st.error(f"❌ Error al eliminar el ensayo: {str(e)}")
+            
+            else:
+                st.info("No hay ensayos registrados en la base de datos")
 
-        with st.expander("📋 Ver tablas de la base de datos"):
-            table_to_view = st.selectbox("Selecciona una tabla para ver los datos", [
-                "clientes", "ensayos", "ubicacion", "condiciones_ambientales",
-                "cultivo", "pulverizadora", "colorante", "personal",
-                "herbicida", "modelo_deteccion", "resultados_malezas"
-            ])
+            # SECCIÓN PARA RESETEO COMPLETO (MANTENIMIENTO)
+            st.markdown("---")
+            st.subheader("🧹 Limpieza de Datos")
 
-            try:
-                df = pd.read_sql_query(f"SELECT * FROM {table_to_view}", conn)
-                st.dataframe(df)
-            except Exception as e:
-                st.error(f"No se pudo leer la tabla: {str(e)}")
-    else:
-        st.error("No hay conexión a la base de datos.")
+            st.warning("ADVERTENCIA: Esta acción eliminará TODOS los ensayos de forma permanente.")
+
+            confirmar_reset = st.checkbox("Confirmar", key="confirm_reset_total")
+
+            if confirmar_reset and st.button("🗑️ ELIMINAR TODOS LOS ENSAYOS", key="reset_btn"):
+                try:
+                    cursor = conn.cursor()
+
+                    # Primero se borran las tablas hijas
+                    tablas_hijas = [
+                        "ubicacion", "condiciones_ambientales", "cultivo", "pulverizadora",
+                        "colorante", "personal", "herbicida", "modelo_deteccion", "resultados_malezas"
+                    ]
+                    for tabla in tablas_hijas:
+                        cursor.execute(f"DELETE FROM {tabla}")
+
+                    # Luego las tablas principales
+                    cursor.execute("DELETE FROM ensayos")
+                    cursor.execute("DELETE FROM clientes")
+
+                    conn.commit()
+                    st.success("✅ Todas las tablas fueron vaciadas correctamente.")
+                    st.balloons()
+                    st.rerun()  # Para refrescar la interfaz
+                except Exception as e:
+                    conn.rollback()
+                    st.error(f"❌ Error al resetear tablas: {str(e)}")
+
+            # VISUALIZACIÓN DE DATOS
+            st.markdown("---")
+            st.subheader("🔍 Exploración de Datos")
+            
+            with st.expander("Ver contenido de tablas"):
+                table_to_view = st.selectbox(
+                    "Seleccione tabla a visualizar:",
+                    [
+                        "clientes", "ensayos", "ubicacion", "condiciones_ambientales",
+                        "cultivo", "pulverizadora", "colorante", "personal",
+                        "herbicida", "modelo_deteccion", "resultados_malezas"
+                    ],
+                    key="table_selector"
+                )
+                
+                try:
+                    df = pd.read_sql_query(f"SELECT * FROM {table_to_view}", conn)
+                    st.dataframe(df)
+                    
+                    # Mostrar conteo de registros
+                    st.info(f"Total de registros: {len(df)}")
+                    
+                except Exception as e:
+                    st.error(f"No se pudo leer la tabla: {str(e)}")
+        
+        else:
+            st.error("No hay conexión a la base de datos")
