@@ -4,6 +4,7 @@ import datetime
 import sqlite3
 from sqlite3 import Error
 from verificarStem import verificar_columnas, archivos_estandarizados
+from actualizar import actualizar_weed_placement
 
 USERS = {
     "desarrollador": {

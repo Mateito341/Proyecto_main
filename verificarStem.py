@@ -153,6 +153,7 @@ def archivos_estandarizados(df):
     Crea los archivos estandarizados con sus respectivos datos.
     - Reemplaza '>25' por 30 en la columna 'size'
     - Normaliza columnas clave y las renombra
+    - Maneja específicamente los valores NA en weed_placement
     """
     df_estandar = pd.DataFrame()
     
@@ -161,19 +162,27 @@ def archivos_estandarizados(df):
             if col == "weed applied":
                 df_estandar[col] = df[col].apply(estandarizar_applied).astype("Int64")
             elif col == "weed placement":
-                df_estandar[col] = df[col].apply(traducir_surco).astype(str)
+                # Convertir NA a None antes de la traducción
+                df_estandar[col] = df[col].apply(lambda x: traducir_surco(x) if pd.notna(x) else None)
             elif col == "size":
                 # Reemplazar '>25' por 30 antes de asignar
                 df_estandar[col] = df[col].replace(">25", 30)
-                df_estandar[col] = pd.to_numeric(df_estandar[col], errors='coerce')  # <-- Asegura tipo float
-
+                df_estandar[col] = pd.to_numeric(df_estandar[col], errors='coerce')
             else:
                 df_estandar[col] = df[col]
         else:
             df_estandar[col] = pd.NA
             st.warning(f"⚠️ Columna '{col}' no encontrada, se llenará con valores nulos")
 
+    # Convertir nombres de columnas a formato estándar
     df_estandar.columns = [col.strip().lower().replace(" ", "_") for col in df_estandar.columns]
+
+    # Asegurar que weed_placement sea tipo string con NA convertidos a None
+    if 'weed_placement' in df_estandar.columns:
+        df_estandar['weed_placement'] = df_estandar['weed_placement'].where(
+            pd.notna(df_estandar['weed_placement']), 
+            None
+        )
 
     st.success(f"\n📄 Archivo procesado y estandarizado")
     st.dataframe(df_estandar, use_container_width=True)
@@ -195,7 +204,7 @@ def traducir_surco(valor):
     '''
     # Manejo de valores nulos o vacíos
     if pd.isna(valor) or str(valor).strip() == '':
-        return pd.NA
+        return None
     
     # Convertir a string y normalizar
     valor_str = str(valor).strip().lower()

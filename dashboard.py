@@ -260,7 +260,19 @@ def crear_grafico(tipo_grafico, df, variable_analisis='weed_applied'):
         plot_data = plot_data.sort_values('rango')
     
     fig = go.Figure()
-    colors = ['#008148' if val >= 90 else '#FF0000' for val in plot_data['valor']] if variable_analisis == 'weed_applied' else '#008148'
+
+
+    if variable_analisis == 'weed_applied':
+        colors = []
+        for val in plot_data['valor']:
+            if val >= 90:
+                colors.append('#4CAF50')  # Verde suave
+            elif 80 <= val < 90:
+                colors.append('#FFC107')  # Ámbar suave
+            else:
+                colors.append('#F44336')  # Rojo suave
+    else:
+        colors = '#2196F3'  # Azul para otras métricas
     
     fig.add_trace(go.Bar(
         x=plot_data['rango'],
@@ -268,6 +280,7 @@ def crear_grafico(tipo_grafico, df, variable_analisis='weed_applied'):
         marker_color=colors,
         text=[f"{v:.1f}%" if variable_analisis == 'weed_applied' else f"{v:.1f}" for v in plot_data['valor']],
         textposition='auto',
+        textfont=dict(size=12, color='white'),
         width=0.5,
         hoverinfo='x+y',
         showlegend=False
