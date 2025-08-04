@@ -158,7 +158,7 @@ def create_tables(conn):
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS modelo_deteccion (
             ensayo_id INTEGER PRIMARY KEY,
-            model_id INTEGER,
+            model_id TEXT,
             sens INTEGER,
             tile INTEGER,
             FOREIGN KEY (ensayo_id) REFERENCES ensayos(ensayo_id)
@@ -260,17 +260,17 @@ with tabs[1]:
     with col2:
         st.subheader("🌦️ Condiciones Ambientales")
         ambient_temperature = st.number_input("Temperatura ambiente (°C)")
-        wind_speed = st.number_input("Velocidad del viento (km/h) *")
-        relative_humidity = st.number_input("Humedad relativa (%)")
+        wind_speed = st.number_input("Velocidad del viento (km/h) *", min_value=0.0)
+        relative_humidity = st.number_input("Humedad relativa (%)", min_value=0.0, max_value=100.0)
         wind_direction = st.text_input("Dirección del viento")
-        ambient_light_intensity = st.number_input("Intensidad de luz (lux)")
+        ambient_light_intensity = st.number_input("Intensidad de luz (lux)", min_value=0.0)
         cloudiness = st.number_input("Nubosidad (%)", min_value=0.0, max_value=100.0, value=0.0)
     with col3:
         st.subheader("🌱 Cultivo")
         crop_specie = st.text_input("Especie del cultivo *")
         tillage = st.selectbox("¿Suelo labrado?", ["Sí", "No"])
-        row_spacing = st.number_input("Distancia entre hileras(cm)")
-        crop_population = st.number_input("Población por hectárea")
+        row_spacing = st.number_input("Distancia entre hileras(cm)", min_value=0.0)
+        crop_population = st.number_input("Población por hectárea", min_value=0.0)
         crop_stage = st.text_input("Estado fenológico")
 
 with tabs[2]:
@@ -282,21 +282,21 @@ with tabs[2]:
         sprayer_year = st.text_input("Año de fabricación")
         nozzle_nomenclature = st.text_input("Nomenclatura de boquillas")
         nozzle_droplet_classification = st.text_input("Clasificación de gotas")
-        nozzle_spacing = st.number_input("Espaciado de boquillas (cm)")
-        boom_height = st.number_input("Altura del botalón (cm)")
-        speed = st.number_input("Velocidad de avance (km/h) *")
-        spray_pressure = st.number_input("Presión de aplicación (bar)")
-        flow_rate = st.number_input("Caudal (L/min)")
+        nozzle_spacing = st.number_input("Espaciado de boquillas (cm)", min_value=0.0)
+        boom_height = st.number_input("Altura del botalón (cm)", min_value=0.0)
+        speed = st.number_input("Velocidad de avance (km/h) *", min_value=0.0)
+        spray_pressure = st.number_input("Presión de aplicación (bar)", min_value=0.0)
+        flow_rate = st.number_input("Caudal (L/min)", min_value=0.0)
     with col2:
         st.subheader("🧪 Colorante")
         dye_used = st.text_input("Tipo de colorante")
         dye_manufacturer = st.text_input("Fabricante", key="dye_manufacturer")
-        dye_concentration_ll = st.number_input("Concentración (Líquido: l/l)")
-        dye_concentration_gl = st.number_input("Concentración (Sólido: g/l)")
+        dye_concentration_ll = st.number_input("Concentración (Líquido: l/l)", min_value=0.0)
+        dye_concentration_gl = st.number_input("Concentración (Sólido: g/l)", min_value=0.0)
     with col3:
         st.subheader("💧 Herbicida")
         herbicide = st.text_input("Nombre del herbicida")
-        dose = st.number_input("Dosis aplicada (l/ha)")
+        dose = st.number_input("Dosis aplicada (l/ha)", min_value=0.0)
 
 with tabs[3]:
     col1, col2 = st.columns(2)
@@ -307,6 +307,7 @@ with tabs[3]:
         uploader = st.text_input("Persona que cargó los datos")
     with col2:
         st.subheader("🌾 Modelo de Detección")
+        model_id = st.text_input("ID del modelo de detección")
         sens = st.selectbox("Sensibilidad", [1, 2, 3])
         tile = st.selectbox("Baldosa", [1, 2, 3])
 
@@ -397,6 +398,7 @@ with tabs[4]:
 
     st.markdown("#### 🛠️ Evaluación")
     st.write("**🌾 Modelo de Detección**")
+    st.write(f"- ID del modelo: {model_id}")
     st.write(f"- Sensibilidad: {sens}")
     st.write(f"- Baldosa: {tile}")
     if csv_file:
@@ -434,6 +436,8 @@ with tabs[4]:
             if errores:
                 for error in errores:
                     st.error(error)
+            elif 'df_estandarizado' not in locals() or df_estandarizado is None:
+                st.error("🚫 Para enviar el formulario es obligatorio subir un archivo CSV válido y estandarizado.")
             else:
                 # Solo proceder si no hay errores y hay conexión a la BD
                 if conn is not None:
@@ -527,9 +531,9 @@ with tabs[4]:
                         # Insertar modelo de detección
                         cursor.execute(
                             """INSERT INTO modelo_deteccion (
-                                ensayo_id, sens, tile
-                            ) VALUES (?, ?, ?)""",
-                            (ensayo_id, sens, tile)
+                                ensayo_id, model_id, sens, tile
+                            ) VALUES (?, ?, ?, ?)""",
+                            (ensayo_id, model_id, sens, tile)
                         )
                         
                         # Procesar archivo CSV si existe

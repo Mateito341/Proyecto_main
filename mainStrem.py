@@ -3,7 +3,7 @@ import pandas as pd
 import datetime
 import sqlite3
 from sqlite3 import Error
-from verficar import verificar_columnas, estandarizar_applied, traducir_surco
+from verificarStem import verificar_columnas, archivos_estandarizados
 
 USERS = {
     "desarrollador": {
@@ -36,6 +36,12 @@ def login_section():
 if "logged_in" not in st.session_state:
     login_section()
     st.stop()  # Detiene la ejecución del resto del código hasta que se loguee
+
+# Inicializar variables de sesión para el CSV
+if 'csv_confirmado' not in st.session_state:
+    st.session_state['csv_confirmado'] = False
+if 'df_estandarizado' not in st.session_state:
+    st.session_state['df_estandarizado'] = None
 
 # Configuración de la base de datos SQLite
 def create_connection():
@@ -158,7 +164,7 @@ def create_tables(conn):
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS modelo_deteccion (
             ensayo_id INTEGER PRIMARY KEY,
-            model_id INTEGER,
+            model_id TEXT,
             sens INTEGER,
             tile INTEGER,
             FOREIGN KEY (ensayo_id) REFERENCES ensayos(ensayo_id)
@@ -260,17 +266,17 @@ with tabs[1]:
     with col2:
         st.subheader("🌦️ Condiciones Ambientales")
         ambient_temperature = st.number_input("Temperatura ambiente (°C)")
-        wind_speed = st.number_input("Velocidad del viento (km/h) *")
-        relative_humidity = st.number_input("Humedad relativa (%)")
+        wind_speed = st.number_input("Velocidad del viento (km/h) *", min_value=0.0)
+        relative_humidity = st.number_input("Humedad relativa (%)", min_value=0.0, max_value=100.0)
         wind_direction = st.text_input("Dirección del viento")
-        ambient_light_intensity = st.number_input("Intensidad de luz (lux)")
+        ambient_light_intensity = st.number_input("Intensidad de luz (lux)", min_value=0.0)
         cloudiness = st.number_input("Nubosidad (%)", min_value=0.0, max_value=100.0, value=0.0)
     with col3:
         st.subheader("🌱 Cultivo")
         crop_specie = st.text_input("Especie del cultivo *")
         tillage = st.selectbox("¿Suelo labrado?", ["Sí", "No"])
-        row_spacing = st.number_input("Distancia entre hileras(cm)")
-        crop_population = st.number_input("Población por hectárea")
+        row_spacing = st.number_input("Distancia entre hileras(cm)", min_value=0.0)
+        crop_population = st.number_input("Población por hectárea", min_value=0.0)
         crop_stage = st.text_input("Estado fenológico")
 
 with tabs[2]:
@@ -282,33 +288,63 @@ with tabs[2]:
         sprayer_year = st.text_input("Año de fabricación")
         nozzle_nomenclature = st.text_input("Nomenclatura de boquillas")
         nozzle_droplet_classification = st.text_input("Clasificación de gotas")
-        nozzle_spacing = st.number_input("Espaciado de boquillas (cm)")
-        boom_height = st.number_input("Altura del botalón (cm)")
-        speed = st.number_input("Velocidad de avance (km/h) *")
-        spray_pressure = st.number_input("Presión de aplicación (bar)")
-        flow_rate = st.number_input("Caudal (L/min)")
+        nozzle_spacing = st.number_input("Espaciado de boquillas (cm)", min_value=0.0)
+        boom_height = st.number_input("Altura del botalón (cm)", min_value=0.0)
+        speed = st.number_input("Velocidad de avance (km/h) *", min_value=0.0)
+        spray_pressure = st.number_input("Presión de aplicación (bar)", min_value=0.0)
+        flow_rate = st.number_input("Caudal (L/min)", min_value=0.0)
     with col2:
         st.subheader("🧪 Colorante")
         dye_used = st.text_input("Tipo de colorante")
         dye_manufacturer = st.text_input("Fabricante", key="dye_manufacturer")
-        dye_concentration_ll = st.number_input("Concentración (Líquido: l/l)")
-        dye_concentration_gl = st.number_input("Concentración (Sólido: g/l)")
+        dye_concentration_ll = st.number_input("Concentración (Líquido: l/l)", min_value=0.0)
+        dye_concentration_gl = st.number_input("Concentración (Sólido: g/l)", min_value=0.0)
     with col3:
         st.subheader("💧 Herbicida")
         herbicide = st.text_input("Nombre del herbicida")
-        dose = st.number_input("Dosis aplicada (l/ha)")
+        dose = st.number_input("Dosis aplicada (l/ha)", min_value=0.0)
 
 with tabs[3]:
     col1, col2 = st.columns(2)
     with col1:
-        st.subheader("🌾 Modelo de Detección")
-        sens = st.selectbox("Sensibilidad", [1, 2, 3])
-        tile = st.selectbox("Baldosa", [1, 2, 3])
-    with col2:
         st.subheader("📊 Resultados Malezas")
         st.write("Subí un archivo CSV con los datos de malezas")
         csv_file = st.file_uploader("Cargar archivo CSV", type=["csv"])
         uploader = st.text_input("Persona que cargó los datos")
+    with col2:
+        st.subheader("🌾 Modelo de Detección")
+        model_id = st.text_input("ID del modelo de detección")
+        sens = st.selectbox("Sensibilidad", [1, 2, 3])
+        tile = st.selectbox("Baldosa", [1, 2, 3])
+
+    if csv_file:
+        try:
+            df_csv = pd.read_csv(csv_file)
+            dataframe_procesado, errores_tipo_dato = verificar_columnas(df_csv)
+        except Exception as e:
+            st.error(f"Error al leer el archivo CSV: {e}")
+            dataframe_procesado = None
+            errores_tipo_dato = {"lectura": [str(e)]}
+    else:
+        dataframe_procesado = None
+        errores_tipo_dato = {"archivo": ["No se cargó un archivo CSV."]}
+
+
+    if st.button("Confirmar CSV y Estandarizar"):
+        if dataframe_procesado is not None and not errores_tipo_dato:
+            df_estandarizado = archivos_estandarizados(dataframe_procesado)
+            st.session_state['df_estandarizado'] = df_estandarizado
+            st.session_state['csv_confirmado'] = True
+        elif dataframe_procesado is None:
+            st.error("🚫 No se cargó un archivo CSV válido.")
+            st.session_state['csv_confirmado'] = False
+            st.session_state['df_estandarizado'] = None
+        else:
+            st.error("🚫 El archivo tiene errores de tipo de dato. No se puede estandarizar.")
+            st.session_state['csv_confirmado'] = False
+            st.session_state['df_estandarizado'] = None
+
+
 
 with tabs[4]:
     st.subheader("Resumen")
@@ -370,6 +406,7 @@ with tabs[4]:
 
     st.markdown("#### 🛠️ Evaluación")
     st.write("**🌾 Modelo de Detección**")
+    st.write(f"- ID del modelo: {model_id}")
     st.write(f"- Sensibilidad: {sens}")
     st.write(f"- Baldosa: {tile}")
     if csv_file:
@@ -402,11 +439,15 @@ with tabs[4]:
                 errores.append("La especie del cultivo es obligatoria.")
             if not speed:
                 errores.append("La velocidad de la pulverizadora es obligatoria.")
+            if not st.session_state['csv_confirmado'] or st.session_state['df_estandarizado'] is None:
+                errores.append("Para enviar el formulario es obligatorio subir un archivo CSV válido y estandarizado.")
+
 
             # Mostrar errores
             if errores:
                 for error in errores:
                     st.error(error)
+
             else:
                 # Solo proceder si no hay errores y hay conexión a la BD
                 if conn is not None:
@@ -500,27 +541,34 @@ with tabs[4]:
                         # Insertar modelo de detección
                         cursor.execute(
                             """INSERT INTO modelo_deteccion (
-                                ensayo_id, sens, tile
-                            ) VALUES (?, ?, ?)""",
-                            (ensayo_id, sens, tile)
+                                ensayo_id, model_id, sens, tile
+                            ) VALUES (?, ?, ?, ?)""",
+                            (ensayo_id, model_id, sens, tile)
                         )
                         
                         # Procesar archivo CSV si existe
-                        if csv_file:
+                        df_estandarizado = st.session_state['df_estandarizado']
+                        for _, row in df_estandarizado.iterrows():
                             try:
-                                csv_data = pd.read_csv(csv_file)
-                                for _, row in csv_data.iterrows():
-                                    cursor.execute(
-                                        """INSERT INTO resultados_malezas (
-                                            ensayo_id, uploader, weed_diameter, size, height,
-                                            weed_placement, weed_type, weed_name, weed_applied
-                                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                                        (ensayo_id, uploader, row.get('weed_diameter'), row.get('size'),
-                                        row.get('height'), row.get('weed_placement'), 
-                                        row.get('weed_type'), row.get('weed_name'), row.get('weed_applied'))
-                                    )
-                            except Exception as e:
-                                st.warning(f"Advertencia: No se pudo procesar el archivo CSV. Error: {str(e)}")
+                                
+                                weed_diameter = float(row.get('weed_diameter')) if pd.notnull(row.get('weed_diameter')) else None
+                                size = float(row.get('size')) if pd.notnull(row.get('size')) else None
+                                height = float(row.get('height')) if pd.notnull(row.get('height')) else None
+                                weed_placement = str(row.get('weed_placement')) if pd.notnull(row.get('weed_placement')) else None
+                                weed_type = str(row.get('weed_type')) if pd.notnull(row.get('weed_type')) else None
+                                weed_name = str(row.get('weed_name')) if pd.notnull(row.get('weed_name')) else None
+                                weed_applied = str(row.get('weed_applied')) if pd.notnull(row.get('weed_applied')) else None
+
+                                cursor.execute(
+                                    """INSERT INTO resultados_malezas (
+                                        ensayo_id, uploader, weed_diameter, size, height,
+                                        weed_placement, weed_type, weed_name, weed_applied
+                                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                    (ensayo_id, uploader, weed_diameter, size, height,
+                                    weed_placement, weed_type, weed_name, weed_applied)
+                                )
+                            except Exception as row_error:
+                                st.warning(f"Fila con error: {row.to_dict()} – {row_error}")
                         
                         conn.commit()
                         st.success("✅ Formulario enviado correctamente a la base de datos")
