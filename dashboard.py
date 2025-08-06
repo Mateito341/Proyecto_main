@@ -27,6 +27,7 @@ def obtener_datos_malezas():
         ca.wind_speed,
         e.test_date AS fecha_ensayo,
         cli.name AS cliente,
+        cli.modules_id,
         u.farm
     FROM resultados_malezas r
     LEFT JOIN ensayos e ON r.ensayo_id = e.ensayo_id
@@ -98,7 +99,7 @@ def obtener_datos_aplico():
 
 # Función auxiliar para aplicar filtros
 def aplicar_filtros(df, tile=None, sens=None, size=None, placement=None, 
-                   weed_type=None, weed_name=None, crop=None, wind=None, speed=None):
+                   weed_type=None, weed_name=None, crop=None, wind=None, speed=None, fecha_inicio=None, fecha_fin=None, modulo=None):
     df_filtrado = df.copy()
     
     if tile:
@@ -132,6 +133,15 @@ def aplicar_filtros(df, tile=None, sens=None, size=None, placement=None,
         speed_bins = [tuple(map(float, rango.split('-'))) for rango in speed]
         df_filtrado = df_filtrado.loc[df_filtrado['speed'].apply(
             lambda x: any(min_val <= x < max_val for min_val, max_val in speed_bins) if pd.notna(x) else False)]
+        
+        # Nuevos filtros
+    if fecha_inicio and fecha_fin:
+        df_filtrado = df_filtrado.loc[
+            (df_filtrado['fecha_ensayo'] >= fecha_inicio) & 
+            (df_filtrado['fecha_ensayo'] <= fecha_fin)
+        ]
+    if modulo:
+        df_filtrado = df_filtrado.loc[df_filtrado['modules_id'].isin(modulo)]
     
     return df_filtrado
 
@@ -412,7 +422,7 @@ filtros = html.Div([
                 multi=True,
                 placeholder="Seleccione baldosa(s)"
             )
-        ], style={'width': '24%', 'display': 'inline-block', 'margin': '5px'}),
+        ], style={'width': '23%', 'display': 'inline-block', 'margin': '5px'}),
 
         html.Div([
             html.Label("Sensibilidad"),
@@ -422,7 +432,7 @@ filtros = html.Div([
                 multi=True,
                 placeholder="Seleccione sensibilidad(es)"
             )
-        ], style={'width': '24%', 'display': 'inline-block', 'margin': '5px'}),
+        ], style={'width': '23%', 'display': 'inline-block', 'margin': '5px'}),
 
         html.Div([
             html.Label("Tamaño maleza"),
@@ -432,7 +442,7 @@ filtros = html.Div([
                 multi=True,
                 placeholder="Seleccione tamaño(s)"
             )
-        ], style={'width': '24%', 'display': 'inline-block', 'margin': '5px'}),
+        ], style={'width': '23%', 'display': 'inline-block', 'margin': '5px'}),
 
         html.Div([
             html.Label("Ubicación maleza"),
@@ -442,7 +452,7 @@ filtros = html.Div([
                 multi=True,
                 placeholder="Seleccione ubicación(es)"
             )
-        ], style={'width': '24%', 'display': 'inline-block', 'margin': '5px'}),
+        ], style={'width': '23%', 'display': 'inline-block', 'margin': '5px'}),
     ]),
     
     # Fila 2
@@ -455,7 +465,7 @@ filtros = html.Div([
                 multi=True,
                 placeholder="Seleccione tipo(s)"
             )
-        ], style={'width': '24%', 'display': 'inline-block', 'margin': '5px'}),
+        ], style={'width': '23%', 'display': 'inline-block', 'margin': '5px'}),
 
         html.Div([
             html.Label("Nombre maleza"),
@@ -465,7 +475,7 @@ filtros = html.Div([
                 multi=True,
                 placeholder="Seleccione nombre(s)"
             )
-        ], style={'width': '24%', 'display': 'inline-block', 'margin': '5px'}),
+        ], style={'width': '23%', 'display': 'inline-block', 'margin': '5px'}),
 
         html.Div([
             html.Label("Especie cultivo"),
@@ -475,7 +485,7 @@ filtros = html.Div([
                 multi=True,
                 placeholder="Seleccione especie(s)"
             )
-        ], style={'width': '24%', 'display': 'inline-block', 'margin': '5px'}),
+        ], style={'width': '23%', 'display': 'inline-block', 'margin': '5px'}),
 
         html.Div([
             html.Label("Velocidad de avance"),
@@ -485,7 +495,7 @@ filtros = html.Div([
                 multi=True,
                 placeholder="Seleccione velocidad(es)"
             )
-        ], style={'width': '24%', 'display': 'inline-block', 'margin': '5px'}),
+        ], style={'width': '23%', 'display': 'inline-block', 'margin': '5px'}),
     ]),
 
     # Fila 3
@@ -498,8 +508,44 @@ filtros = html.Div([
                 multi=True,
                 placeholder="Seleccione velocidad(es)"
             )
-        ], style={'width': '24%', 'display': 'inline-block', 'margin': '5px'}),
-    ])
+        ], style={'width': '23%', 'display': 'inline-block', 'margin': '5px'}),
+        
+        html.Div([
+            html.Label("Módulo"),
+            dcc.Dropdown(
+                id='filtro-modulo',
+                options=[{'label': str(m), 'value': m} 
+                         for m in sorted(df_malezas['modules_id'].dropna().unique())],
+                multi=True,
+                placeholder="Seleccione módulo(s)"
+            )
+        ], style={'width': '23%', 'display': 'inline-block', 'margin': '5px'}),
+    ]),
+        
+
+    # Fila 4
+    html.Div([
+        html.Label("Fecha desde: "),
+        dcc.DatePickerSingle(
+            id='filtro-fecha-desde',
+            min_date_allowed=df_malezas['fecha_ensayo'].min(),
+            max_date_allowed=df_malezas['fecha_ensayo'].max(),
+            date=df_malezas['fecha_ensayo'].min(),                display_format='YYYY-MM-DD'
+        )
+    ], style={'width': '23%', 'display': 'inline-block', 'margin': '5px'}),
+    
+    html.Div([
+        html.Label("Fecha hasta: "),
+        dcc.DatePickerSingle(
+            id='filtro-fecha-hasta',
+            min_date_allowed=df_malezas['fecha_ensayo'].min(),
+            max_date_allowed=df_malezas['fecha_ensayo'].max(),
+            date=df_malezas['fecha_ensayo'].max(),
+            display_format='YYYY-MM-DD'
+        )
+    ], style={'width': '23%', 'display': 'inline-block', 'margin': '5px'})
+
+
 ], style={'border': '1px solid #ddd', 'padding': '10px', 'margin-bottom': '20px', 'border-radius': '5px'})
 
 # Callback para actualizar gráficos
@@ -521,10 +567,13 @@ filtros = html.Div([
      Input('filtro-name', 'value'),
      Input('filtro-crop', 'value'),
      Input('filtro-wind', 'value'),
-     Input('filtro-speed', 'value')]
+     Input('filtro-speed', 'value'),
+     Input('filtro-fecha-desde', 'date'),
+     Input('filtro-fecha-hasta', 'date'),
+     Input('filtro-modulo', 'value')],
 )
-def actualizar_graficos(tile, sens, size, placement, weed_type, weed_name, crop, wind, speed):
-    df_filtrado = aplicar_filtros(df_aplico, tile, sens, size, placement, weed_type, weed_name, crop, wind, speed)
+def actualizar_graficos(tile, sens, size, placement, weed_type, weed_name, crop, wind, speed, start_date, end_date, modulo):
+    df_filtrado = aplicar_filtros(df_malezas, tile, sens, size, placement, weed_type, weed_name, crop, wind, speed, start_date, end_date, modulo)
     
     fig_velocidad = crear_grafico('speed', df_filtrado.copy())
     fig_sensibilidad = crear_grafico('sensitivity', df_filtrado.copy())
@@ -551,14 +600,17 @@ def actualizar_graficos(tile, sens, size, placement, weed_type, weed_name, crop,
      State('filtro-name', 'value'),
      State('filtro-crop', 'value'),
      State('filtro-wind', 'value'),
-     State('filtro-speed', 'value')],
+     State('filtro-speed', 'value'),
+     State('filtro-fecha-desde', 'date'),
+     State('filtro-fecha-hasta', 'date'),
+     State('filtro-modulo', 'value')],
     prevent_initial_call=True
 )
-def descargar_malezas_filtradas(n_clicks, tile, sens, size, placement, weed_type, weed_name, crop, wind, speed):
+def descargar_malezas_filtradas(n_clicks, tile, sens, size, placement, weed_type, weed_name, crop, wind, speed, start_date, end_date, modulo):
     if n_clicks is None:
         return no_update
     
-    df_filtrado = aplicar_filtros(df_malezas, tile, sens, size, placement, weed_type, weed_name, crop, wind, speed)
+    df_filtrado = aplicar_filtros(df_malezas, tile, sens, size, placement, weed_type, weed_name, crop, wind, speed, start_date, end_date, modulo)
     
     columnas_malezas = [
         'ensayo_id', 'weed_diameter', 'size', 'height', 'weed_placement',
