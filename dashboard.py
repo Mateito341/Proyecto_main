@@ -69,6 +69,7 @@ def obtener_datos_aplico():
                     m.sens AS sensitivity,
                     m.tile,
                     r.weed_applied,
+                    r.weed_diameter,
                     r.size,
                     r.weed_placement,
                     r.weed_name,
@@ -98,9 +99,30 @@ def obtener_datos_aplico():
     return df
 
 # Función auxiliar para aplicar filtros
-def aplicar_filtros(df, tile=None, sens=None, size=None, placement=None, 
+def aplicar_filtros(df, tile=None, sens=None, size=None, placement=None, weed_diameter=None,
                    weed_type=None, weed_name=None, crop=None, wind=None, speed=None, fecha_inicio=None, fecha_fin=None, modulo=None):
     df_filtrado = df.copy()
+    
+    def parse_range(rango):
+        """Helper function to parse range strings safely"""
+        if not rango:
+            return None
+        
+        parts = rango.split('-')
+        if len(parts) == 2:
+            try:
+                min_val = float(parts[0])
+                max_val = float(parts[1])
+                return (min_val, max_val)
+            except (ValueError, TypeError):
+                return None
+        elif rango.startswith('>'):
+            try:
+                min_val = float(rango[1:])
+                return (min_val, float('inf'))
+            except (ValueError, TypeError):
+                return None
+        return None
     
     if tile:
         df_filtrado = df_filtrado.loc[df_filtrado['tile'].isin(tile)]
@@ -109,14 +131,13 @@ def aplicar_filtros(df, tile=None, sens=None, size=None, placement=None,
     if size:
         bins = []
         for rango in size:
-            if rango == '>25':
-                bins.append((25, float('inf')))
-            else:
-                min_val, max_val = map(float, rango.split('-'))
-                bins.append((min_val, max_val))
+            parsed = parse_range(rango)
+            if parsed:
+                bins.append(parsed)
         
-        df_filtrado = df_filtrado.loc[df_filtrado['size'].apply(
-            lambda x: any(min_val <= x < max_val for min_val, max_val in bins) if pd.notna(x) else False)]
+        if bins:
+            df_filtrado = df_filtrado.loc[df_filtrado['size'].apply(
+                lambda x: any(min_val <= x < max_val for min_val, max_val in bins) if pd.notna(x) else False)]
     if placement:
         df_filtrado = df_filtrado.loc[df_filtrado['weed_placement'].isin(placement)]
     if weed_type:
@@ -126,15 +147,37 @@ def aplicar_filtros(df, tile=None, sens=None, size=None, placement=None,
     if crop:
         df_filtrado = df_filtrado.loc[df_filtrado['crop_specie'].isin(crop)]
     if wind:
-        wind_bins = [tuple(map(float, rango.split('-'))) for rango in wind]
-        df_filtrado = df_filtrado.loc[df_filtrado['wind_speed'].apply(
-            lambda x: any(min_val <= x < max_val for min_val, max_val in wind_bins) if pd.notna(x) else False)]
-    if speed:
-        speed_bins = [tuple(map(float, rango.split('-'))) for rango in speed]
-        df_filtrado = df_filtrado.loc[df_filtrado['speed'].apply(
-            lambda x: any(min_val <= x < max_val for min_val, max_val in speed_bins) if pd.notna(x) else False)]
+        wind_bins = []
+        for rango in wind:
+            parsed = parse_range(rango)
+            if parsed:
+                wind_bins.append(parsed)
         
-        # Nuevos filtros
+        if wind_bins:
+            df_filtrado = df_filtrado.loc[df_filtrado['wind_speed'].apply(
+                lambda x: any(min_val <= x < max_val for min_val, max_val in wind_bins) if pd.notna(x) else False)]
+    if speed:
+        speed_bins = []
+        for rango in speed:
+            parsed = parse_range(rango)
+            if parsed:
+                speed_bins.append(parsed)
+        
+        if speed_bins:
+            df_filtrado = df_filtrado.loc[df_filtrado['speed'].apply(
+                lambda x: any(min_val <= x < max_val for min_val, max_val in speed_bins) if pd.notna(x) else False)]
+    if weed_diameter:
+        diameter_bins = []
+        for rango in weed_diameter:
+            parsed = parse_range(rango)
+            if parsed:
+                diameter_bins.append(parsed)
+        
+        if diameter_bins:
+            df_filtrado = df_filtrado.loc[df_filtrado['weed_diameter'].apply(
+                lambda x: any(min_val <= x < max_val for min_val, max_val in diameter_bins) if pd.notna(x) else False)]
+
+    # Nuevos filtros
     if fecha_inicio and fecha_fin:
         df_filtrado = df_filtrado.loc[
             (df_filtrado['fecha_ensayo'] >= fecha_inicio) & 
@@ -223,6 +266,12 @@ def crear_grafico(tipo_grafico, df, variable_analisis='weed_applied'):
         df.loc[:, 'rango'] = df['crop_specie'].astype(str)
         titulo = f"Por especie de cultivo"
         etiqueta_x = "Especie de cultivo"
+    elif tipo_grafico == 'weed_diameter':
+        df = df.copy()
+        df.loc[:, 'rango'] = pd.cut(df['weed_diameter'], bins=[0, 15, 30, 1000], 
+                                  labels=["015", "15-30", ">=30"], right=False) 
+        titulo = f"Por diámetro de maleza (cm)"
+        etiqueta_x = "Rango de diámetro"
 
     df = df.dropna(subset=['rango', variable_analisis]).copy()
 
@@ -267,6 +316,10 @@ def crear_grafico(tipo_grafico, df, variable_analisis='weed_applied'):
     elif tipo_grafico == 'wind_speed':
         orden_wind = ["0-5", "5-10", "10-15", "15-20", "20-25"]
         plot_data['rango'] = pd.Categorical(plot_data['rango'], categories=orden_wind, ordered=True)
+        plot_data = plot_data.sort_values('rango')
+    elif tipo_grafico == 'weed_diameter':
+        orden_diameter = ["0-15", "15-30", ">=30"]
+        plot_data['rango'] = pd.Categorical(plot_data['rango'], categories=orden_diameter, ordered=True)
         plot_data = plot_data.sort_values('rango')
     
     fig = go.Figure()
@@ -399,6 +452,10 @@ def crear_opciones_filtro(columna):
                 {'label': '10-15 km/h', 'value': '10-15'},
                 {'label': '15-20 km/h', 'value': '15-20'},
                 {'label': '20-25 km/h', 'value': '20-25'}]
+    elif columna == 'weed_diameter':
+        return [{'label': '0-15 cm', 'value': '0-15'}, 
+                {'label': '15-30 cm', 'value': '15-30'},
+                {'label': '>=30 cm', 'value': '30-1000'},]
     elif columna == 'speed':
         return [{'label': '0-5 km/h', 'value': '0-5'}, 
                 {'label': '5-10 km/h', 'value': '5-10'},
@@ -520,6 +577,16 @@ filtros = html.Div([
                 placeholder="Seleccione módulo(s)"
             )
         ], style={'width': '23%', 'display': 'inline-block', 'margin': '5px'}),
+
+        html.Div([
+            html.Label("Diametro maleza"),
+            dcc.Dropdown(
+                id='filtro-diameter',
+                options=crear_opciones_filtro('weed_diameter'),
+                multi=True,
+                placeholder="Seleccione diámetro(s)"
+            )
+        ], style={'width': '23%', 'display': 'inline-block', 'margin': '5px'}),
     ]),
         
 
@@ -558,7 +625,8 @@ filtros = html.Div([
      Output('grafico-velocidad-viento', 'figure'),
      Output('grafico-tipo', 'figure'),
      Output('grafico-nombre', 'figure'),
-     Output('grafico-especie', 'figure')],
+     Output('grafico-especie', 'figure'),
+     Output('grafico-diameter', 'figure')],
     [Input('filtro-tile', 'value'),
      Input('filtro-sens', 'value'),
      Input('filtro-size', 'value'),
@@ -570,10 +638,24 @@ filtros = html.Div([
      Input('filtro-speed', 'value'),
      Input('filtro-fecha-desde', 'date'),
      Input('filtro-fecha-hasta', 'date'),
-     Input('filtro-modulo', 'value')],
+     Input('filtro-modulo', 'value'),
+     Input('filtro-diameter', 'value')],
 )
-def actualizar_graficos(tile, sens, size, placement, weed_type, weed_name, crop, wind, speed, start_date, end_date, modulo):
-    df_filtrado = aplicar_filtros(df_malezas, tile, sens, size, placement, weed_type, weed_name, crop, wind, speed, start_date, end_date, modulo)
+def actualizar_graficos(tile, sens, size, placement, weed_type, weed_name, crop, wind, speed, start_date, end_date, modulo, weed_diameter):
+
+    # Clean filter values by removing None or empty strings
+    def clean_filter(value):
+        if value is None:
+            return None
+        if isinstance(value, (list, tuple)):
+            return [v for v in value if v is not None and v != '']
+        return value
+    
+    wind = clean_filter(wind)
+    speed = clean_filter(speed)
+    weed_diameter = clean_filter(weed_diameter)
+
+    df_filtrado = aplicar_filtros(df_malezas, tile, sens, size, placement, weed_type, weed_name, crop, wind, speed, start_date, end_date, modulo, weed_diameter)
     
     fig_velocidad = crear_grafico('speed', df_filtrado.copy())
     fig_sensibilidad = crear_grafico('sensitivity', df_filtrado.copy())
@@ -584,9 +666,11 @@ def actualizar_graficos(tile, sens, size, placement, weed_type, weed_name, crop,
     fig_tipo = crear_grafico('weed_type', df_filtrado.copy())
     fig_nombre = crear_grafico('weed_name', df_filtrado.copy())
     fig_especie = crear_grafico('crop_specie', df_filtrado.copy())
+    fig_diametro = crear_grafico('weed_diameter', df_filtrado.copy())
+
     
     return (fig_velocidad, fig_sensibilidad, fig_tamano, fig_ubicacion, 
-            fig_baldosa, fig_velocidad_viento, fig_tipo, fig_nombre, fig_especie)
+            fig_baldosa, fig_velocidad_viento, fig_tipo, fig_nombre, fig_especie, fig_diametro)
 
 # Callback para descargar malezas filtradas
 @app.callback(
@@ -603,14 +687,15 @@ def actualizar_graficos(tile, sens, size, placement, weed_type, weed_name, crop,
      State('filtro-speed', 'value'),
      State('filtro-fecha-desde', 'date'),
      State('filtro-fecha-hasta', 'date'),
-     State('filtro-modulo', 'value')],
+     State('filtro-modulo', 'value'),
+     State('filtro-diameter', 'value')],
     prevent_initial_call=True
 )
-def descargar_malezas_filtradas(n_clicks, tile, sens, size, placement, weed_type, weed_name, crop, wind, speed, start_date, end_date, modulo):
+def descargar_malezas_filtradas(n_clicks, tile, sens, size, placement, weed_type, weed_name, crop, wind, speed, start_date, end_date, modulo, weed_diameter):
     if n_clicks is None:
         return no_update
     
-    df_filtrado = aplicar_filtros(df_malezas, tile, sens, size, placement, weed_type, weed_name, crop, wind, speed, start_date, end_date, modulo)
+    df_filtrado = aplicar_filtros(df_malezas, tile, sens, size, placement, weed_type, weed_name, crop, wind, speed, start_date, end_date, modulo, weed_diameter)
     
     columnas_malezas = [
         'ensayo_id', 'weed_diameter', 'size', 'height', 'weed_placement',
@@ -691,6 +776,12 @@ app.layout = html.Div([
     html.Div([
         html.Div([
             dcc.Graph(id='grafico-nombre')
+        ], style={'width': '49%', 'display': 'inline-block'})
+    ]),
+
+    html.Div([
+        html.Div([
+            dcc.Graph(id='grafico-diameter')
         ], style={'width': '49%', 'display': 'inline-block'})
     ]),
 
