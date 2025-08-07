@@ -4,7 +4,6 @@ import datetime
 import sqlite3
 from sqlite3 import Error
 from verificarStem import verificar_columnas, archivos_estandarizados
-from actualizar import actualizar_weed_placement
 
 USERS = {
     "desarrollador": {
@@ -309,9 +308,9 @@ with tabs[3]:
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("📊 Resultados Malezas")
-        st.write("Subí un archivo CSV con los datos de malezas")
+        st.write("Subí un archivo CSV con los datos de malezas *")
         csv_file = st.file_uploader("Cargar archivo CSV", type=["csv"])
-        uploader = st.text_input("Persona que cargó los datos")
+        uploader = st.text_input("Persona que cargó los datos *")
     with col2:
         st.subheader("🌾 Modelo de Detección")
         model_id = st.text_input("ID del modelo de detección")
@@ -424,6 +423,8 @@ with tabs[4]:
             
             if not name:
                 errores.append("El nombre del cliente es obligatorio.")
+            if not uploader:
+                errores.append("El nombre del cargador de datos es obligatorio.")
             if not modules_id:
                 errores.append("El ID de los módulos es obligatorio.")
             if not trial_testers:
