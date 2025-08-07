@@ -41,6 +41,9 @@ def obtener_datos_malezas():
     """
     df = pd.read_sql_query(query, conn)
     conn.close()
+
+    # Convertir 0 en 'size' a NaN (vacío)
+    df['size'] = df['size'].replace(0, float('nan'))
     return df
 
 # Función para obtener datos del mapa
@@ -96,6 +99,9 @@ def obtener_datos_aplico():
     if 'tile' in df.columns:
         df.loc[:, 'tile'] = pd.to_numeric(df['tile'], errors='coerce')
         df = df.loc[df['tile'].isin([1, 2, 3]) | df['tile'].isna()]
+
+    # Convertir 0 en 'size' a NaN (vacío)
+    df['size'] = df['size'].replace(0, float('nan'))
     return df
 
 # Función auxiliar para aplicar filtros
@@ -128,16 +134,35 @@ def aplicar_filtros(df, tile=None, sens=None, size=None, placement=None,
         df_filtrado = df_filtrado.loc[df_filtrado['tile'].isin(tile)]
     if sens:
         df_filtrado = df_filtrado.loc[df_filtrado['sensitivity'].isin(sens)]
+
     if size:
-        bins = []
+        tamano_bins = []
         for rango in size:
-            parsed = parse_range(rango)
-            if parsed:
-                bins.append(parsed)
-        
-        if bins:
-            df_filtrado = df_filtrado.loc[df_filtrado['size'].apply(
-                lambda x: any(min_val <= x < max_val for min_val, max_val in bins) if pd.notna(x) else False)]
+            if rango == '3':
+                tamano_bins.append((2, 3.5))
+            elif rango == '5':
+                tamano_bins.append((3.5, 5.5))
+            elif rango == '7':
+                tamano_bins.append((5.5, 7.5))
+            elif rango == '9':
+                tamano_bins.append((7.5, 9.5))
+            elif rango == '15':
+                tamano_bins.append((9.5, 15.5))
+            elif rango == '20':
+                tamano_bins.append((15.5, 20.5))
+            elif rango == '25':
+                tamano_bins.append((20.5, 25.5))
+            elif rango == '>25':
+                tamano_bins.append((26, 1000))
+
+        df_filtrado['size'] = pd.to_numeric(df_filtrado['size'], errors='coerce')
+        df_filtrado = df_filtrado[df_filtrado['size'].notna()]
+
+        if tamano_bins:
+            df_filtrado = df_filtrado[df_filtrado['size'].apply(
+                lambda x: any(min_val <= x < max_val for min_val, max_val in tamano_bins)
+            )]
+
     if placement:
         df_filtrado = df_filtrado.loc[df_filtrado['weed_placement'].isin(placement)]
     if weed_type:
@@ -194,12 +219,6 @@ def aplicar_filtros(df, tile=None, sens=None, size=None, placement=None,
     if modulo:
         df_filtrado = df_filtrado.loc[df_filtrado['modules_id'].isin(modulo)]
 
-
-    print(f'Filtrado por diámetro: {weed_diameter}')
-    print(f'Tamaño df_filtrado: {len(df_filtrado)}')
-    print(df_filtrado['weed_diameter'].unique())
-
-    
     return df_filtrado
 
 # Obtener datos
@@ -229,47 +248,53 @@ def crear_grafico(tipo_grafico, df, variable_analisis='weed_applied'):
         df.loc[:, 'rango'] = pd.cut(df['speed'], bins=[0, 5, 10, 15, 20, 25], 
                                 labels=["0-5", "5-10", "10-15", "15-20", "20-25"], right=False)
         titulo = f"Por velocidad de avance (km/h)"
-        etiqueta_x = "Rango de velocidad de"
+        etiqueta_x = "Rango de velocidad"
+
     elif tipo_grafico == 'sensitivity':
         df = df.dropna(subset=['sensitivity']).copy()
         df.loc[:, 'rango'] = df['sensitivity'].astype(int).astype(str)
         titulo = f"Por sensibilidad (1-3)"
         etiqueta_x = "Nivel de sensibilidad"
+
+
     elif tipo_grafico == 'size':
         df = df.copy()
-        df.loc[:, 'size'] = pd.to_numeric(df['size'], errors='coerce')
-        df = df.dropna(subset=['size']).copy()
-
-        bins = [0, 5, 10, 15, 20, 25, float('inf')]
-        labels = ["0-5", "5-10", "10-15", "15-20", "20-25", ">25"]
-        df.loc[:, 'rango'] = pd.cut(df['size'], bins=bins, labels=labels, right=False)
-
+        df.loc[:, 'rango'] = pd.cut(df['size'], 
+                                bins=[0, 3.5, 5.5, 7.5, 9.5, 15.5, 20.5, 25.5, float('inf')], 
+                                labels=["3", "5", "7", "9", "15", "20", "25", ">25"], 
+                                right=False)
         titulo = f"Por tamaño de maleza (cm)"
-        etiqueta_x = "Tamaño"
+        etiqueta_x = "Rango de tamaño"
+        # Asegurar el orden correcto
+        orden_tamano = ["3", "5", "7", "9", "15", "20", "25", ">25"]
+        df.loc[:, 'rango'] = pd.Categorical(df['rango'], categories=orden_tamano, ordered=True)
 
-        orden_size = ["0-5", "5-10", "10-15", "15-20", "20-25", ">25"]
-        df.loc[:, 'rango'] = pd.Categorical(df['rango'], categories=orden_size, ordered=True)
+
     elif tipo_grafico == 'weed_placement':
         df = df.dropna(subset=['weed_placement']).copy() 
         df.loc[:, 'rango'] = df['weed_placement'].astype(str) 
         titulo = f"Por ubicación de maleza"
         etiqueta_x = "Ubicación"
+
     elif tipo_grafico == 'tile':
         df = df.dropna(subset=['tile']).copy()
         df.loc[:, 'rango'] = df['tile'].astype(int).astype(str)
         titulo = f"Por baldosa (1-3)"
         etiqueta_x = "Nivel de baldosa"
+
     elif tipo_grafico == 'wind_speed':
         df = df.copy()
         df.loc[:, 'rango'] = pd.cut(df['wind_speed'], bins=[0, 5, 10, 15, 20, 25], 
                                   labels=["0-5", "5-10", "10-15", "15-20", "20-25"], right=False) 
         titulo = f"Por velocidad del viento (km/h)"
         etiqueta_x = "Rango de velocidad"
+
     elif tipo_grafico == 'weed_type':
         df = df.dropna(subset=['weed_type']).copy()  
         df.loc[:, 'rango'] = df['weed_type'].astype(str)
         titulo = f"Por tipo de maleza"
-        etiqueta_x = "Tipo"
+        etiqueta_x = "Tipo de maleza"
+
     elif tipo_grafico == 'weed_name':
         df = df.dropna(subset=['weed_name']).copy()
         df.loc[:, 'rango'] = df['weed_name'].astype(str)
@@ -280,6 +305,7 @@ def crear_grafico(tipo_grafico, df, variable_analisis='weed_applied'):
         df.loc[:, 'rango'] = df['crop_specie'].astype(str)
         titulo = f"Por especie de cultivo"
         etiqueta_x = "Especie de cultivo"
+
     elif tipo_grafico == 'weed_diameter':
         df = df.copy()
         df.loc[:, 'rango'] = pd.cut(df['weed_diameter'], 
@@ -325,8 +351,8 @@ def crear_grafico(tipo_grafico, df, variable_analisis='weed_applied'):
     })
 
     if tipo_grafico == 'size':
-        orden_size = ["0-5", "5-10", "10-15", "15-20", "20-25", ">25"]
-        plot_data['rango'] = pd.Categorical(plot_data['rango'], categories=orden_size, ordered=True)
+        orden_tamano = ["3", "5", "7", "9", "15", "20", "25", ">25"]
+        plot_data['rango'] = pd.Categorical(plot_data['rango'], categories=orden_tamano, ordered=True)
         plot_data = plot_data.sort_values('rango')
     elif tipo_grafico == 'speed':
         orden_speed = ["0-5", "5-10", "10-15", "15-20", "20-25"]
@@ -459,12 +485,16 @@ def crear_opciones_filtro(columna):
                 {'label': '2', 'value': 2},
                 {'label': '3', 'value': 3}]
     elif columna == 'size':
-        return [{'label': '0-5 cm', 'value': '0-5'}, 
-                {'label': '5-10 cm', 'value': '5-10'},
-                {'label': '10-15 cm', 'value': '10-15'},
-                {'label': '15-20 cm', 'value': '15-20'},
-                {'label': '20-25 cm', 'value': '20-25'},
-                {'label': '>25 cm', 'value': '>25'}]
+        return [
+            {'label': '3 cm', 'value': "3"}, 
+            {'label': '5 cm', 'value': "5"},
+            {'label': '7 cm', 'value': "7"},
+            {'label': '9 cm', 'value': "9"},
+            {'label': '15 cm', 'value': "15"},
+            {'label': '20 cm', 'value': "20"},
+            {'label': '25 cm', 'value': "25"},
+            {'label': '>25 cm', 'value': '>25'}
+        ]
     elif columna == 'wind_speed':
         return [{'label': '0-5 km/h', 'value': '0-5'}, 
                 {'label': '5-10 km/h', 'value': '5-10'},
@@ -661,8 +691,6 @@ filtros = html.Div([
      Input('filtro-weed_diameter', 'value')],
 )
 def actualizar_graficos(tile, sens, size, placement, weed_type, weed_name, crop, wind, speed, start_date, end_date, modulo, weed_diameter):
-    print("Valor recibido de filtro weed_diameter:", weed_diameter)
-
 
     # Clean filter values by removing None or empty strings
     def clean_filter(value):
