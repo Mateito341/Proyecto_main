@@ -99,8 +99,8 @@ def obtener_datos_aplico():
     return df
 
 # Función auxiliar para aplicar filtros
-def aplicar_filtros(df, tile=None, sens=None, size=None, placement=None, weed_diameter=None,
-                   weed_type=None, weed_name=None, crop=None, wind=None, speed=None, fecha_inicio=None, fecha_fin=None, modulo=None):
+def aplicar_filtros(df, tile=None, sens=None, size=None, placement=None,
+                   weed_type=None, weed_name=None, crop=None, wind=None, speed=None, fecha_inicio=None, fecha_fin=None, modulo=None, weed_diameter=None):
     df_filtrado = df.copy()
     
     def parse_range(rango):
@@ -166,16 +166,24 @@ def aplicar_filtros(df, tile=None, sens=None, size=None, placement=None, weed_di
         if speed_bins:
             df_filtrado = df_filtrado.loc[df_filtrado['speed'].apply(
                 lambda x: any(min_val <= x < max_val for min_val, max_val in speed_bins) if pd.notna(x) else False)]
+            
     if weed_diameter:
         diameter_bins = []
         for rango in weed_diameter:
-            parsed = parse_range(rango)
-            if parsed:
-                diameter_bins.append(parsed)
-        
+            if rango == '0-15':
+                diameter_bins.append((0, 15))
+            elif rango == '15-30':
+                diameter_bins.append((15, 30))
+            elif rango == '>=30':
+                diameter_bins.append((30, 1000))
+
+        df_filtrado['weed_diameter'] = pd.to_numeric(df_filtrado['weed_diameter'], errors='coerce')
+        df_filtrado = df_filtrado[df_filtrado['weed_diameter'].notna()]
+
         if diameter_bins:
-            df_filtrado = df_filtrado.loc[df_filtrado['weed_diameter'].apply(
-                lambda x: any(min_val <= x < max_val for min_val, max_val in diameter_bins) if pd.notna(x) else False)]
+            df_filtrado = df_filtrado[df_filtrado['weed_diameter'].apply(
+                lambda x: any(min_val <= x < max_val for min_val, max_val in diameter_bins)
+            )]
 
     # Nuevos filtros
     if fecha_inicio and fecha_fin:
@@ -185,6 +193,12 @@ def aplicar_filtros(df, tile=None, sens=None, size=None, placement=None, weed_di
         ]
     if modulo:
         df_filtrado = df_filtrado.loc[df_filtrado['modules_id'].isin(modulo)]
+
+
+    print(f'Filtrado por diámetro: {weed_diameter}')
+    print(f'Tamaño df_filtrado: {len(df_filtrado)}')
+    print(df_filtrado['weed_diameter'].unique())
+
     
     return df_filtrado
 
@@ -268,10 +282,15 @@ def crear_grafico(tipo_grafico, df, variable_analisis='weed_applied'):
         etiqueta_x = "Especie de cultivo"
     elif tipo_grafico == 'weed_diameter':
         df = df.copy()
-        df.loc[:, 'rango'] = pd.cut(df['weed_diameter'], bins=[0, 15, 30, 1000], 
-                                  labels=["015", "15-30", ">=30"], right=False) 
+        df.loc[:, 'rango'] = pd.cut(df['weed_diameter'], 
+                                bins=[0, 15, 30, float('inf')], 
+                                labels=["0-15", "15-30", ">=30"], 
+                                right=False)
         titulo = f"Por diámetro de maleza (cm)"
         etiqueta_x = "Rango de diámetro"
+        # Asegurar el orden correcto
+        orden_diameter = ["0-15", "15-30", ">=30"]
+        df.loc[:, 'rango'] = pd.Categorical(df['rango'], categories=orden_diameter, ordered=True)
 
     df = df.dropna(subset=['rango', variable_analisis]).copy()
 
@@ -455,7 +474,7 @@ def crear_opciones_filtro(columna):
     elif columna == 'weed_diameter':
         return [{'label': '0-15 cm', 'value': '0-15'}, 
                 {'label': '15-30 cm', 'value': '15-30'},
-                {'label': '>=30 cm', 'value': '30-1000'},]
+                {'label': '>=30 cm', 'value': '>=30'},]
     elif columna == 'speed':
         return [{'label': '0-5 km/h', 'value': '0-5'}, 
                 {'label': '5-10 km/h', 'value': '5-10'},
@@ -581,7 +600,7 @@ filtros = html.Div([
         html.Div([
             html.Label("Diametro maleza"),
             dcc.Dropdown(
-                id='filtro-diameter',
+                id='filtro-weed_diameter',
                 options=crear_opciones_filtro('weed_diameter'),
                 multi=True,
                 placeholder="Seleccione diámetro(s)"
@@ -639,9 +658,11 @@ filtros = html.Div([
      Input('filtro-fecha-desde', 'date'),
      Input('filtro-fecha-hasta', 'date'),
      Input('filtro-modulo', 'value'),
-     Input('filtro-diameter', 'value')],
+     Input('filtro-weed_diameter', 'value')],
 )
 def actualizar_graficos(tile, sens, size, placement, weed_type, weed_name, crop, wind, speed, start_date, end_date, modulo, weed_diameter):
+    print("Valor recibido de filtro weed_diameter:", weed_diameter)
+
 
     # Clean filter values by removing None or empty strings
     def clean_filter(value):
@@ -653,7 +674,6 @@ def actualizar_graficos(tile, sens, size, placement, weed_type, weed_name, crop,
     
     wind = clean_filter(wind)
     speed = clean_filter(speed)
-    weed_diameter = clean_filter(weed_diameter)
 
     df_filtrado = aplicar_filtros(df_malezas, tile, sens, size, placement, weed_type, weed_name, crop, wind, speed, start_date, end_date, modulo, weed_diameter)
     
@@ -688,7 +708,7 @@ def actualizar_graficos(tile, sens, size, placement, weed_type, weed_name, crop,
      State('filtro-fecha-desde', 'date'),
      State('filtro-fecha-hasta', 'date'),
      State('filtro-modulo', 'value'),
-     State('filtro-diameter', 'value')],
+     State('filtro-weed_diameter', 'value')],
     prevent_initial_call=True
 )
 def descargar_malezas_filtradas(n_clicks, tile, sens, size, placement, weed_type, weed_name, crop, wind, speed, start_date, end_date, modulo, weed_diameter):
@@ -776,10 +796,7 @@ app.layout = html.Div([
     html.Div([
         html.Div([
             dcc.Graph(id='grafico-nombre')
-        ], style={'width': '49%', 'display': 'inline-block'})
-    ]),
-
-    html.Div([
+        ], style={'width': '49%', 'display': 'inline-block'}),
         html.Div([
             dcc.Graph(id='grafico-diameter')
         ], style={'width': '49%', 'display': 'inline-block'})
