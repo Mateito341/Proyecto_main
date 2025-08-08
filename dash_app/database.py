@@ -2,7 +2,7 @@
 import sqlite3
 import pandas as pd
 
-DB_PATH = "ensayos.db"
+DB_PATH = "/home/user/Documentos/Proyecto_main/ensayos.db"
 
 def _run_query(query):
     conn = sqlite3.connect(DB_PATH)
